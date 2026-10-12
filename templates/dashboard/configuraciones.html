@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGR Municipal — Configuraciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body data-api="{% url 'api_raiz' %}" data-csrf="{{ csrf_token }}" data-login-url="{% url 'login' %}">
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">SGR</span>
+    SGR Municipal
+  </div>
+  <div class="divider-v"></div>
+  <div class="delegacion-select" id="delegacionSelect">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+    <span class="full">Delegación <strong>{{ sgr_delegacion }}</strong></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="user-block">
+    <div class="user-avatar">{{ sgr_iniciales }}</div>
+    <div class="user-text">
+      <span class="name">{{ sgr_nombre }}</span>
+      <span class="role">{{ sgr_rol }}</span>
+    </div>
+    <a class="logout-btn" href="{% url 'logout' %}">Salir</a>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="nav-group-label">Trabajo</div>
+    <a class="nav-item" href="{% url 'dashboard' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Mi panel
+    </a>
+    <a class="nav-item" href="{% url 'agenda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      Agenda (tubo)
+    </a>
+    <a class="nav-item" href="{% url 'casos_sociales' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      Casos sociales
+    </a>
+    <a class="nav-item" href="{% url 'ingreso_atencion' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/><path d="M12 11v6M9 14h6"/></svg>
+      Ingreso de atención
+    </a>
+    <a class="nav-item" href="{% url 'busqueda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Búsqueda / filtro
+    </a>
+    <div class="nav-group-label">Sistema</div>
+    {% if sgr_puede_admin %}
+    <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.36.68.64.92"/></svg>
+      Administración
+      <span class="nav-tag">admin</span>
+    </a>
+    {% endif %}
+    <a class="nav-item active" href="{% url 'configuraciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      Configuraciones
+    </a>
+    <div class="sidebar-foot">SGR Municipal · v2.4<br>Municipalidad de La Serena</div>
+  </nav>
+
+  <main class="content">
+    <div class="page-heading">
+      <div>
+        <h1>Configuraciones</h1>
+        <div class="subtitle">Administra tu perfil, tu contraseña y tus preferencias de notificación</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Perfil</h2>
+      </div>
+      <div class="settings-card">
+        <form id="perfilForm" novalidate>
+          <div class="field-group-2">
+            <div class="field">
+              <label for="pNombre">Nombre completo</label>
+              <input type="text" id="pNombre" value="{{ p_nombre }}">
+            </div>
+            <div class="field">
+              <label for="pCargo">Cargo</label>
+              <input type="text" id="pCargo" value="{{ p_cargo }}" disabled>
+            </div>
+          </div>
+          <div class="field-group-2">
+            <div class="field">
+              <label for="pCorreo">Correo institucional</label>
+              <input type="email" id="pCorreo" value="{{ p_correo }}">
+            </div>
+            <div class="field">
+              <label for="pTelefono">Teléfono</label>
+              <input type="tel" id="pTelefono" placeholder="+56 9 1234 5678" value="{{ p_telefono }}">
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn-primary">Guardar perfil</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Cambiar contraseña</h2>
+      </div>
+      <div class="settings-card">
+        <form id="passwordForm" novalidate>
+          <div class="field">
+            <label for="passActual">Contraseña actual</label>
+            <input type="password" id="passActual" autocomplete="current-password">
+          </div>
+          <div class="field-group-2">
+            <div class="field">
+              <label for="passNueva">Nueva contraseña</label>
+              <input type="password" id="passNueva" placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número, 1 especial" autocomplete="new-password">
+            </div>
+            <div class="field">
+              <label for="passConfirmar">Confirmar nueva contraseña</label>
+              <input type="password" id="passConfirmar" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn-primary">Actualizar contraseña</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Preferencias de notificación</h2>
+      </div>
+      <div class="settings-card">
+        <div class="pref-row">
+          <div>
+            <div class="pref-title">Alertas de compromisos vencidos</div>
+            <div class="pref-desc">Recibir aviso cuando un compromiso de tu agenda supere su fecha límite.</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="prefVencidos" {% if pref_vencidos %}checked{% endif %}><span class="slider"></span></label>
+        </div>
+        <div class="pref-row">
+          <div>
+            <div class="pref-title">Validación de evidencias</div>
+            <div class="pref-desc">Notificar cuando una actividad sea aprobada o rechazada.</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="prefEvidencias" {% if pref_evidencias %}checked{% endif %}><span class="slider"></span></label>
+        </div>
+        <div class="pref-row">
+          <div>
+            <div class="pref-title">Resumen semanal por correo</div>
+            <div class="pref-desc">Enviar un resumen de tu avance y metas cada lunes.</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="prefResumen" {% if pref_resumen %}checked{% endif %}><span class="slider"></span></label>
+        </div>
+        <div class="settings-actions">
+          <button type="button" class="btn-primary" id="guardarPrefsBtn">Guardar preferencias</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/configuraciones.js"></script>
+</body>
+</html>

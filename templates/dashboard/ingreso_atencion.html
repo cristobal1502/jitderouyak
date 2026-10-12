@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGR Municipal — Ingreso de atención</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body data-api="{% url 'api_raiz' %}" data-csrf="{{ csrf_token }}" data-login-url="{% url 'login' %}">
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">SGR</span>
+    SGR Municipal
+  </div>
+  <div class="divider-v"></div>
+  <div class="delegacion-select" id="delegacionSelect">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+    <span class="full">Delegación <strong>{{ sgr_delegacion }}</strong></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="user-block">
+    <div class="user-avatar">{{ sgr_iniciales }}</div>
+    <div class="user-text">
+      <span class="name">{{ sgr_nombre }}</span>
+      <span class="role">{{ sgr_rol }}</span>
+    </div>
+    <a class="logout-btn" href="{% url 'logout' %}">Salir</a>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="nav-group-label">Trabajo</div>
+    <a class="nav-item" href="{% url 'dashboard' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Mi panel
+    </a>
+    <a class="nav-item" href="{% url 'agenda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      Agenda (tubo)
+    </a>
+    <a class="nav-item" href="{% url 'casos_sociales' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      Casos sociales
+    </a>
+    <a class="nav-item active" href="{% url 'ingreso_atencion' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/><path d="M12 11v6M9 14h6"/></svg>
+      Ingreso de atención
+    </a>
+    <a class="nav-item" href="{% url 'busqueda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Búsqueda / filtro
+    </a>
+    <div class="nav-group-label">Sistema</div>
+    {% if sgr_puede_admin %}
+    <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.36.68.64.92"/></svg>
+      Administración
+      <span class="nav-tag">admin</span>
+    </a>
+    {% endif %}
+    <a class="nav-item" href="{% url 'configuraciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      Configuraciones
+    </a>
+    <div class="sidebar-foot">SGR Municipal · v2.4<br>Municipalidad de La Serena</div>
+  </nav>
+
+  <main class="content content-wide">
+    <div class="page-heading">
+      <div>
+        <h1>Ingreso de atención</h1>
+        <div class="subtitle">Registra una nueva atención usando los catálogos de Administración</div>
+      </div>
+    </div>
+
+    {% if sgr_puede_registrar %}
+    <div class="settings-card">
+      <form id="atencionForm" novalidate>
+        <div class="field-group-2">
+          <div class="field">
+            <label for="aSolicitante">Solicitante <span class="required">*</span></label>
+            <input type="text" id="aSolicitante" placeholder="Nombre o RUT de quien solicita" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="aFecha">Fecha de registro <span class="required">*</span></label>
+            <input type="date" id="aFecha">
+          </div>
+        </div>
+
+        <div class="field-group-2">
+          <div class="field">
+            <label for="aTipo">Tipo de atención <span class="required">*</span></label>
+            <select id="aTipo"></select>
+          </div>
+          <div class="field">
+            <label for="aSub">Sub atención <span class="required">*</span></label>
+            <select id="aSub" disabled></select>
+          </div>
+        </div>
+
+        <div class="field-group-2">
+          <div class="field">
+            <label for="aDelegacion">Delegación <span class="required">*</span></label>
+            <select id="aDelegacion"></select>
+          </div>
+          <div class="field">
+            <label for="aResponsable">Usuario responsable <span class="required">*</span></label>
+            <select id="aResponsable" disabled></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="aDescripcion">Descripción <span class="required">*</span></label>
+          <textarea id="aDescripcion" placeholder="Describe la atención realizada"></textarea>
+        </div>
+
+        <div class="settings-actions form-actions-2">
+          <button type="button" class="btn-secondary" id="limpiarBtn">Limpiar</button>
+          <button type="submit" class="btn-primary">Registrar atención</button>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <p class="empty-state">Tu rol no tiene el permiso «Registrar actividades». Puedes consultar las atenciones de tu alcance más abajo.</p>
+    {% endif %}
+
+    <div class="section" style="margin-top:30px;">
+      <div class="section-head">
+        <h2>Atenciones registradas</h2>
+        <span class="meta" id="contador"></span>
+      </div>
+      <div class="table-scroll">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th style="width:80px;">Código</th>
+              <th style="width:100px;">Fecha</th>
+              <th>Solicitante</th>
+              <th>Tipo / Sub atención</th>
+              <th>Descripción</th>
+              <th>Delegación</th>
+              <th>Responsable</th>
+            </tr>
+          </thead>
+          <tbody id="tablaBody"></tbody>
+        </table>
+      </div>
+      <p class="empty-state" id="emptyState" style="display:none;">Aún no hay atenciones registradas.</p>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/ingreso_atencion.js"></script>
+</body>
+</html>

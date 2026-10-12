@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGR Municipal — Casos sociales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">SGR</span>
+    SGR Municipal
+  </div>
+  <div class="divider-v"></div>
+  <div class="delegacion-select" id="delegacionSelect">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+    <span class="full">Delegación <strong>{{ sgr_delegacion }}</strong></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="user-block">
+    <div class="user-avatar">{{ sgr_iniciales }}</div>
+    <div class="user-text">
+      <span class="name">{{ sgr_nombre }}</span>
+      <span class="role">{{ sgr_rol }}</span>
+    </div>
+    <a class="logout-btn" href="{% url 'logout' %}">Salir</a>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="nav-group-label">Trabajo</div>
+    <a class="nav-item" href="{% url 'dashboard' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Mi panel
+    </a>
+    <a class="nav-item" href="{% url 'agenda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      Agenda (tubo)
+    </a>
+    <a class="nav-item active" href="{% url 'casos_sociales' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      Casos sociales
+    </a>
+    <a class="nav-item" href="{% url 'ingreso_atencion' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/><path d="M12 11v6M9 14h6"/></svg>
+      Ingreso de atención
+    </a>
+    <a class="nav-item" href="{% url 'busqueda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Búsqueda / filtro
+    </a>
+    <div class="nav-group-label">Sistema</div>
+    {% if sgr_puede_admin %}
+    <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.36.68.64.92"/></svg>
+      Administración
+      <span class="nav-tag">admin</span>
+    </a>
+    {% endif %}
+    <a class="nav-item" href="{% url 'configuraciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      Configuraciones
+    </a>
+    <div class="sidebar-foot">SGR Municipal · v2.4<br>Municipalidad de La Serena</div>
+  </nav>
+
+  <main class="content content-wide">
+    <div class="page-heading">
+      <div>
+        <h1>Casos y atenciones sociales</h1>
+        <div class="subtitle">Historial secuencial de atenciones diferenciadas por persona usuaria (hasta 3 gestiones)</div>
+      </div>
+      <button class="btn-primary" id="openModalBtn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        Nueva atención social
+      </button>
+    </div>
+
+    <div class="search-bar">
+      <label for="buscarUsuario">Buscar usuario</label>
+      <div class="search-row">
+        <input type="text" id="buscarUsuario" placeholder="RUT o nombre del usuario…">
+        <button class="btn-secondary" id="buscarBtn">Buscar</button>
+      </div>
+    </div>
+
+    <div id="casosContainer" class="casos-list"></div>
+    <p class="empty-state" id="emptyState" style="display:none;">No se encontraron casos para esa búsqueda.</p>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Nueva atención social</h3>
+      <button class="modal-close" id="closeModalBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="casoForm">
+        <div id="datosUsuarioFields">
+          <div class="field">
+            <label for="uNombre">Nombre completo <span class="required">*</span></label>
+            <input type="text" id="uNombre" placeholder="Ej: María Morales Carrasco">
+          </div>
+          <div class="field-group-2">
+            <div class="field">
+              <label for="uRut">RUT <span class="required">*</span></label>
+              <input type="text" id="uRut" placeholder="12.345.678-9">
+            </div>
+            <div class="field">
+              <label for="uTelefono">Teléfono</label>
+              <input type="tel" id="uTelefono" placeholder="+56 9 8765 4321">
+            </div>
+          </div>
+          <div class="field">
+            <label for="uSector">Sector <span class="required">*</span></label>
+            <input type="text" id="uSector" placeholder="Ej: Tierras Blancas">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="gTipo">Tipo de gestión <span class="required">*</span></label>
+          <select id="gTipo">
+            <option value="Atención inicial / Ficha FIBE">Atención inicial / Ficha FIBE</option>
+            <option value="Visita a terreno / Verificación habitacional">Visita a terreno / Verificación habitacional</option>
+            <option value="Entrega de beneficio municipal">Entrega de beneficio municipal</option>
+            <option value="Derivación a otra red">Derivación a otra red</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="gDetalle">Detalle de la gestión <span class="required">*</span></label>
+          <textarea id="gDetalle" placeholder="Describe la gestión realizada"></textarea>
+        </div>
+        <div class="field">
+          <label for="gFecha">Fecha <span class="required">*</span></label>
+          <input type="date" id="gFecha">
+        </div>
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" id="cancelModalBtn">Cancelar</button>
+      <button class="btn-primary" id="saveCasoBtn">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/casos-sociales.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGR Municipal — Iniciar sesión</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body data-error="{{ error }}" data-aviso="{{ aviso }}">
+
+<div class="login-shell">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="mark">SGR</span>
+      <span class="brand-name">SGR Municipal</span>
+    </div>
+
+    <div class="login-heading">
+      <h1>Iniciar sesión</h1>
+      <p>Ingresa con tu cuenta institucional para acceder a tu panel de gestión territorial.</p>
+    </div>
+
+    <form id="loginForm" method="post" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field">
+        <label for="usuario">Usuario o correo</label>
+        <input type="text" id="usuario" name="usuario" value="{{ usuario }}" placeholder="usuario o nombre.apellido@municipalidad.cl" autocomplete="username">
+      </div>
+
+      <div class="field">
+        <label for="password">Contraseña</label>
+        <div class="password-wrap">
+          <input type="password" id="password" name="password" placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número, 1 especial" autocomplete="current-password">
+          <button type="button" class="toggle-visibility" id="togglePassword" aria-label="Mostrar contraseña">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="recordar" name="recordar" value="1">
+          Recordarme
+        </label>
+        <a href="{% url 'forgot_password' %}" class="forgot-link">¿Olvidaste tu contraseña?</a>
+      </div>
+
+      <button type="submit" class="btn-primary btn-block" id="submitBtn">
+        Ingresar
+      </button>
+    </form>
+
+    <div class="login-footer">
+      Municipalidad de La Serena · Acceso restringido a personal autorizado
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/login.js"></script>
+</body>
+</html>

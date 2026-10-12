@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGR Municipal — Validar código</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body data-validar-url="{% url 'validar_codigo' %}" data-reenviar-url="{% url 'reenviar_codigo' %}"
+      data-vigencia="{{ vigencia }}" data-intentos="{{ intentos }}" data-cooldown="{{ cooldown }}" data-max-intentos="{{ max_intentos }}">
+
+<div class="login-shell">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="mark">SGR</span>
+      <span class="brand-name">SGR Municipal</span>
+    </div>
+
+    <div class="login-heading">
+      <h1>Validar código</h1>
+      <p>Enviamos un código de 6 dígitos a <span class="masked-email" id="maskedEmail">{{ correo_enmascarado }}</span>. Ingrésalo para continuar.</p>
+    </div>
+
+    <form id="codigoForm" novalidate>
+      {% csrf_token %}
+      <div class="field">
+        <label for="codigo">Código de verificación</label>
+        <input type="text" id="codigo" name="codigo" class="code-input" inputmode="numeric" maxlength="6" placeholder="······" autocomplete="one-time-code">
+      </div>
+
+      <div class="code-meta">
+        <span id="vigenciaTexto">El código vence en <b id="vigenciaTimer">--:--</b></span>
+        <span id="intentosTexto">Intentos restantes: <b id="intentosRestantes">{{ intentos }}</b></span>
+      </div>
+
+      <button type="submit" class="btn-primary btn-block" id="validarBtn">Validar código</button>
+    </form>
+
+    <div class="login-footer">
+      ¿No te llegó?
+      <button type="button" class="link-btn" id="reenviarBtn" disabled>Reenviar código</button>
+      <span id="reenviarTimer"></span>
+      <br><br>
+      <a href="{% url 'login' %}" class="forgot-link">Volver a iniciar sesión</a>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/validar_codigo.js"></script>
+</body>
+</html>

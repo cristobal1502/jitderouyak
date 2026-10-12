@@ -1,0 +1,232 @@
+@import url('styles.css');
+
+/* ---------- Layout ---------- */
+.login-shell{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(196,18,48,0.08), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(139,29,25,0.10), transparent 45%),
+    var(--bg);
+  padding:24px;
+}
+
+.login-card{
+  width:100%;
+  max-width:400px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:34px 34px 28px;
+  box-shadow:0 24px 60px rgba(139,29,25,0.10);
+}
+
+/* ---------- Brand ---------- */
+.login-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:26px;
+}
+.login-brand .mark{
+  width:32px;height:32px;
+  border-radius:7px;
+  background:var(--red-primary);
+  color:#fff;
+  font-weight:800;
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+}
+.login-brand .brand-name{
+  font-weight:800;
+  font-size:16px;
+  letter-spacing:-0.01em;
+}
+
+/* ---------- Heading ---------- */
+.login-heading h1{
+  font-size:20px;
+  font-weight:700;
+  margin:0 0 6px;
+  letter-spacing:-0.01em;
+}
+.login-heading p{
+  font-size:13px;
+  color:var(--ink-faint);
+  margin:0 0 20px;
+  line-height:1.5;
+}
+
+/* ---------- Server errors (mensajes renderizados por Django) ---------- */
+.server-errors{
+  background:var(--red-soft-strong);
+  color:var(--red-dark);
+  border:1px solid #E3ABA6;
+  border-radius:var(--radius);
+  padding:11px 13px;
+  font-size:13px;
+  line-height:1.5;
+  margin-bottom:18px;
+}
+.server-errors div + div{margin-top:4px;}
+
+.server-success{
+  background:#FCEBEA;
+  color:var(--red-primary);
+  border:1px solid var(--red-soft-strong);
+  border-radius:var(--radius);
+  padding:11px 13px;
+  font-size:13px;
+  line-height:1.5;
+  margin-bottom:18px;
+}
+
+/* ---------- Status icon (pantallas de confirmación) ---------- */
+.status-icon{
+  width:48px;height:48px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-bottom:18px;
+}
+.status-icon.success{background:var(--red-soft); color:var(--red-primary);}
+.status-icon.error{background:var(--red-soft-strong); color:var(--red-dark);}
+
+/* ---------- Form ---------- */
+.login-card .field{margin-bottom:16px;}
+.login-card label{
+  display:block;
+  font-size:12.5px;
+  font-weight:600;
+  color:var(--ink-soft);
+  margin-bottom:6px;
+}
+.login-card input[type="text"],
+.login-card input[type="email"],
+.login-card input[type="password"]{
+  width:100%;
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius);
+  padding:10px 12px;
+  font-family:inherit;
+  font-size:13.8px;
+  color:var(--ink);
+  background:var(--surface);
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.login-card input[type="text"]:focus,
+.login-card input[type="email"]:focus,
+.login-card input[type="password"]:focus{
+  outline:none;
+  border-color:var(--red-primary);
+  box-shadow:0 0 0 3px var(--red-soft);
+}
+.login-card input.field-invalid{
+  border-color:var(--red-dark);
+}
+
+.password-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+}
+.password-wrap input{padding-right:40px;}
+.toggle-visibility{
+  position:absolute;
+  right:8px;
+  background:none;
+  border:none;
+  color:var(--ink-faint);
+  cursor:pointer;
+  padding:6px;
+  display:flex;
+}
+.toggle-visibility:hover{color:var(--ink-soft);}
+.toggle-visibility.active{color:var(--red-primary);}
+
+.field-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:22px;
+  font-size:12.5px;
+}
+.checkbox-label{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:var(--ink-soft);
+  cursor:pointer;
+}
+.checkbox-label input{accent-color:var(--red-primary);}
+.forgot-link{
+  color:var(--red-primary);
+  text-decoration:none;
+  font-weight:600;
+}
+.forgot-link:hover{text-decoration:underline;}
+
+.btn-block{
+  width:100%;
+  justify-content:center;
+  padding:11px 18px;
+  font-size:14px;
+}
+.btn-primary:disabled{
+  opacity:0.65;
+  cursor:not-allowed;
+}
+
+.login-footer{
+  margin-top:22px;
+  padding-top:16px;
+  border-top:1px solid var(--border);
+  text-align:center;
+  font-size:11.5px;
+  color:var(--ink-faint);
+}
+
+@media (max-width:420px){
+  .login-card{padding:26px 22px 22px;}
+}
+
+/* ---------- Validar código ---------- */
+.login-card input.code-input[type="text"]{
+  text-align:center;
+  letter-spacing:0.55em;
+  font-family:var(--font-mono);
+  font-size:22px;
+  font-weight:500;
+  padding:12px 12px 12px calc(12px + 0.55em);
+}
+.code-meta{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:12.5px;
+  color:var(--ink-faint);
+  margin:-4px 0 20px;
+}
+.code-meta b{color:var(--ink); font-family:var(--font-mono); font-weight:600;}
+.code-meta .expired{color:var(--red-dark); font-weight:600;}
+.link-btn{
+  background:none;
+  border:none;
+  padding:0;
+  font-family:inherit;
+  font-size:12.5px;
+  font-weight:600;
+  color:var(--red-primary);
+  cursor:pointer;
+}
+.link-btn:hover:not(:disabled){text-decoration:underline;}
+.link-btn:disabled{color:var(--ink-faint); cursor:not-allowed;}
+.masked-email{color:var(--ink); font-weight:600;}

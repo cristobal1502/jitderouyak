@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGR Municipal — Búsqueda avanzada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">SGR</span>
+    SGR Municipal
+  </div>
+  <div class="divider-v"></div>
+  <div class="delegacion-select" id="delegacionSelect">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+    <span class="full">Delegación <strong>{{ sgr_delegacion }}</strong></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="user-block">
+    <div class="user-avatar">{{ sgr_iniciales }}</div>
+    <div class="user-text">
+      <span class="name">{{ sgr_nombre }}</span>
+      <span class="role">{{ sgr_rol }}</span>
+    </div>
+    <a class="logout-btn" href="{% url 'logout' %}">Salir</a>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="nav-group-label">Trabajo</div>
+    <a class="nav-item" href="{% url 'dashboard' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Mi panel
+    </a>
+    <a class="nav-item" href="{% url 'agenda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      Agenda (tubo)
+    </a>
+    <a class="nav-item" href="{% url 'casos_sociales' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      Casos sociales
+    </a>
+    <a class="nav-item" href="{% url 'ingreso_atencion' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/><path d="M12 11v6M9 14h6"/></svg>
+      Ingreso de atención
+    </a>
+    <a class="nav-item active" href="{% url 'busqueda' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Búsqueda / filtro
+    </a>
+    <div class="nav-group-label">Sistema</div>
+    {% if sgr_puede_admin %}
+    <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.36.68.64.92"/></svg>
+      Administración
+      <span class="nav-tag">admin</span>
+    </a>
+    {% endif %}
+    <a class="nav-item" href="{% url 'configuraciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      Configuraciones
+    </a>
+    <div class="sidebar-foot">SGR Municipal · v2.4<br>Municipalidad de La Serena</div>
+  </nav>
+
+  <main class="content content-wide">
+    <div class="page-heading">
+      <div>
+        <h1>Búsqueda avanzada y reportabilidad</h1>
+        <div class="subtitle">Consulta transversal de registros, evidencias y cumplimiento operativo</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Panel de parámetros de filtrado</h2>
+        <span class="meta">RF-032</span>
+      </div>
+
+      <div class="filters-panel">
+        <div class="filters-grid">
+          <div class="filter-field">
+            <label for="fDelegacion">Delegación</label>
+            <select id="fDelegacion">
+              <option>Municipalidad de La Serena</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="fPeriodo">Período</label>
+            <select id="fPeriodo">
+              <option>Q3 2026 (01/07 – 30/09)</option>
+              <option>Q2 2026 (01/04 – 30/06)</option>
+              <option>Q1 2026 (01/01 – 31/03)</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="fFuncionario">Funcionario</label>
+            <select id="fFuncionario">
+              <option value="">Todos los funcionarios</option>
+              <option value="Juan Pérez">Juan Pérez</option>
+              <option value="María Rojas">María Rojas</option>
+              <option value="C. Tapia">C. Tapia</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="fItem">Ítem / Meta</label>
+            <select id="fItem">
+              <option value="">Todos los ítems</option>
+              <option value="Operativo en terreno">Operativos en terreno</option>
+              <option value="Atención social">Atención social</option>
+              <option value="Mediación vecinal">Mediación vecinal</option>
+              <option value="Inspección">Inspección</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="fEvidencia">Estado evidencia</label>
+            <select id="fEvidencia">
+              <option value="">Todos los estados</option>
+              <option value="Aprobado">Aprobadas</option>
+              <option value="Pendiente">Pendientes</option>
+              <option value="Rechazado">Rechazadas</option>
+            </select>
+          </div>
+          <div class="filter-field filter-field-range">
+            <label>Rango de fechas</label>
+            <div class="date-range">
+              <input type="date" id="fFechaDesde">
+              <span>a</span>
+              <input type="date" id="fFechaHasta">
+            </div>
+          </div>
+        </div>
+
+        <div class="filters-keywords-row">
+          <div class="filter-field filter-field-grow">
+            <label for="fPalabras">Palabras clave</label>
+            <input type="text" id="fPalabras" placeholder="luminaria, mediación, etc.">
+          </div>
+          <div class="filters-actions">
+            <button class="btn-secondary" id="clearFiltersBtn">Limpiar</button>
+            <button class="btn-primary" id="applyFiltersBtn">Aplicar filtros</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="results-head">
+        <span class="results-count">Resultados obtenidos: <b id="resultsCount">0</b> registros coincidentes</span>
+        <div class="export-actions">
+          <button class="btn-secondary" id="exportPdfBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            Exportar PDF
+          </button>
+          <button class="btn-secondary" id="exportExcelBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+            Exportar Excel (.xlsx)
+          </button>
+        </div>
+      </div>
+
+      <table class="history-table results-table">
+        <thead>
+          <tr>
+            <th style="width:80px;">Código</th>
+            <th style="width:95px;">Fecha</th>
+            <th style="width:110px;">Funcionario</th>
+            <th style="width:150px;">Área / Ítem</th>
+            <th>Descripción</th>
+            <th style="width:100px;">Evidencia</th>
+            <th style="width:100px;">Validación</th>
+            <th style="width:80px;">Puntaje</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <p class="empty-state" id="emptyState" style="display:none;">No hay registros que coincidan con los filtros aplicados.</p>
+
+      <div class="pagination-row">
+        <span class="pagination-info" id="paginationInfo"></span>
+        <div class="pagination-controls" id="paginationControls"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/busqueda.js"></script>
+</body>
+</html>
