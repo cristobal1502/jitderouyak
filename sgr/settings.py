@@ -47,6 +47,17 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# Con HTTPS o dominio detrás de un proxy (nginx, balanceador) agrega el origen, p. ej.:
+# CSRF_TRUSTED_ORIGINS=https://mi-dominio.cl,http://54.12.34.56
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
+
+# WhiteNoise sirve los archivos estáticos con DEBUG=False (si está instalado, ver requirements.txt).
+try:
+    import whitenoise  # noqa: F401
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+except ImportError:
+    pass
+
 ROOT_URLCONF = 'sgr.urls'
 
 TEMPLATES = [
@@ -99,6 +110,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # destino de: python manage.py collectstatic
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
