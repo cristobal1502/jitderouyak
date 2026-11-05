@@ -5,6 +5,8 @@
   POST       api/usuarios/<id>/reiniciar-password/
   GET/POST   api/atenciones/           listar (según alcance) / registrar
   GET        api/opciones-atencion/    catálogos activos para el formulario de atención
+  GET/POST   api/casos/                casos sociales (según alcance) / crear caso + 1ª gestión
+  POST       api/casos/<id>/gestiones/ registrar la gestión 2 o 3 de un caso
   GET/PUT    api/yo/                   perfil propio y preferencias
   POST       api/yo/password/          cambio de contraseña propio
 
@@ -19,7 +21,7 @@ from functools import wraps
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
-from django.db.models import ProtectedError, Q
+from django.db.models import Prefetch, ProtectedError, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -28,7 +30,7 @@ from login.utils import enviar_correo_seguro, generar_password_temporal, validar
 
 from . import permisos as P
 from .models import (
-    Atencion, Delegacion, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
+    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
 )
 
 CORREO_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
@@ -194,6 +196,8 @@ class DelegacionesRecurso(ConCodigo):
             usos.append(f'{o.perfiles.count()} usuario(s)')
         if o.atenciones.exists():
             usos.append(f'{o.atenciones.count()} atención(es)')
+        if o.casos.exists():
+            usos.append(f'{o.casos.count()} caso(s) social(es)')
         return usos
 
 
@@ -227,6 +231,8 @@ class TiposRecurso(ItemsRecurso):
             usos.append(f'{o.subatenciones.count()} sub atención(es)')
         if o.atenciones.exists():
             usos.append(f'{o.atenciones.count()} atención(es)')
+        if o.gestiones.exists():
+            usos.append(f'{o.gestiones.count()} gestión(es) social(es)')
         return usos
 
 
@@ -382,8 +388,14 @@ class UsuariosRecurso(Recurso):
         return perfil
 
     def usos(self, perfil):
+        usos = []
         n = perfil.user.atenciones_a_cargo.count()
-        return [f'{n} atención(es) a su cargo'] if n else []
+        if n:
+            usos.append(f'{n} atención(es) a su cargo')
+        g = perfil.user.gestiones_atendidas.count()
+        if g:
+            usos.append(f'{g} gestión(es) social(es)')
+        return usos
 
     def puede_eliminar(self, perfil, request):
         if perfil.pk == request.user.pk:
@@ -723,3 +735,152 @@ def cambiar_password(request):
     request.user.save()
     update_session_auth_hash(request, request.user)  # mantiene la sesión abierta
     return JsonResponse({'ok': True})
+
+
+# --------------------------------------------------------------- casos sociales
+def validar_rut(texto):
+    """Devuelve el RUT con formato 12.345.678-9 o lanza ErrorApi('rut_invalido') (módulo 11)."""
+    limpio = re.sub(r'[.\s-]', '', str(texto or '')).upper()
+    if not re.fullmatch(r'\d{7,8}[\dK]', limpio):
+        raise ErrorApi('rut_invalido', 'rut')
+    cuerpo, dv = limpio[:-1], limpio[-1]
+    suma = sum(int(d) * f for d, f in zip(reversed(cuerpo), (2, 3, 4, 5, 6, 7) * 2))
+    resto = 11 - suma % 11
+    esperado = '0' if resto == 11 else 'K' if resto == 10 else str(resto)
+    if dv != esperado:
+        raise ErrorApi('rut_invalido', 'rut')
+    return f'{int(cuerpo):,}'.replace(',', '.') + '-' + dv
+
+
+def _casos_base():
+    return CasoSocial.objects.select_related('delegacion').prefetch_related(
+        Prefetch('gestiones', queryset=GestionSocial.objects.select_related('tipo', 'atendido_por').order_by('numero')))
+
+
+def casos_visibles(user):
+    qs = _casos_base()
+    alcance = P.alcance_de(user)
+    if alcance == P.ALCANCE_TODAS:
+        return qs
+    if alcance == P.ALCANCE_DELEGACION:
+        return qs.filter(delegacion__in=P.delegaciones_de(user))
+    return qs.filter(Q(creado_por=user) | Q(gestiones__atendido_por=user)).distinct()
+
+
+def serializar_gestion(g):
+    return {
+        'id': g.pk, 'numero': g.numero, 'tipoId': g.tipo_id, 'tipoNombre': g.tipo.nombre,
+        'detalle': g.detalle, 'fecha': g.fecha.isoformat(),
+        'atendidoPor': P.nombre_visible(g.atendido_por),
+    }
+
+
+def serializar_caso(c):
+    return {
+        'id': c.pk, 'codigo': c.codigo, 'nombre': c.nombre, 'rut': c.rut,
+        'telefono': c.telefono, 'sector': c.sector,
+        'delegacionId': c.delegacion_id, 'delegacionNombre': c.delegacion.nombre,
+        'maxGestiones': CasoSocial.MAX_GESTIONES,
+        'gestiones': [serializar_gestion(g) for g in c.gestiones.all()],
+    }
+
+
+def _validar_gestion(datos, minima=None):
+    tipo = leer_id(datos, 'tipoId', TipoAtencion)
+    if not tipo.activo:
+        raise ErrorApi('referencia_invalida', 'tipoId')
+
+    detalle = datos.get('detalle')
+    detalle = detalle.strip() if isinstance(detalle, str) else ''
+    if len(detalle) < 10:
+        raise ErrorApi('detalle_corto', 'detalle')
+
+    fecha_txt = datos.get('fecha')
+    if not fecha_txt:
+        raise ErrorApi('campo_vacio', 'fecha')
+    try:
+        fecha = date.fromisoformat(str(fecha_txt))
+    except ValueError:
+        raise ErrorApi('fecha_invalida', 'fecha')
+    if fecha > timezone.localdate():
+        raise ErrorApi('fecha_futura', 'fecha')
+    if minima is not None and fecha < minima:
+        raise ErrorApi('fecha_anterior', 'fecha', minima.isoformat())
+    return {'tipo': tipo, 'detalle': detalle, 'fecha': fecha}
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['GET', 'POST'])
+def casos(request):
+    """GET: casos visibles según el alcance del rol. POST: crea el caso y su gestión 1
+    en una sola transacción (si algo falla no queda ni el caso ni la gestión)."""
+    if request.method == 'GET':
+        return JsonResponse([serializar_caso(c) for c in casos_visibles(request.user)], safe=False)
+
+    exigir(request, P.PERM_REGISTRAR)
+    datos = leer_json(request)
+
+    nombre = leer_texto(datos, 'nombre', 150)
+    if len(nombre) < 5:
+        raise ErrorApi('nombre_corto', 'nombre')
+    if not str(datos.get('rut') or '').strip():
+        raise ErrorApi('campo_vacio', 'rut')
+    rut = validar_rut(datos.get('rut'))
+    sector = leer_texto(datos, 'sector', 120)
+    telefono = str(datos.get('telefono') or '').strip()
+    if not TELEFONO_RE.match(telefono):
+        raise ErrorApi('telefono_invalido', 'telefono')
+    delegacion = leer_id(datos, 'delegacionId', Delegacion)
+    if not delegacion.activo:
+        raise ErrorApi('referencia_invalida', 'delegacionId')
+    if not P.delegaciones_de(request.user).filter(pk=delegacion.pk).exists():
+        raise ErrorApi('prohibido', 'delegacionId', status=403)
+    gestion = _validar_gestion(datos)
+
+    existente = CasoSocial.objects.filter(rut=rut).first()
+    if existente is not None:
+        visible = casos_visibles(request.user).filter(pk=existente.pk).exists()
+        raise ErrorApi('duplicado', 'rut', existente.codigo if visible else '')
+
+    caso = None
+    for _ in range(3):  # reintento por si dos personas toman el mismo correlativo a la vez
+        try:
+            with transaction.atomic():
+                caso = CasoSocial.objects.create(
+                    codigo=siguiente_codigo(CasoSocial, 'CS'), nombre=nombre, rut=rut, sector=sector,
+                    telefono=telefono, delegacion=delegacion, creado_por=request.user)
+                GestionSocial.objects.create(caso=caso, numero=1, atendido_por=request.user, **gestion)
+            break
+        except IntegrityError:
+            if CasoSocial.objects.filter(rut=rut).exists():
+                raise ErrorApi('duplicado', 'rut')
+            continue
+    if caso is None:
+        raise ErrorApi('duplicado', 'codigo')
+    return JsonResponse(serializar_caso(_casos_base().get(pk=caso.pk)), status=201)
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['POST'])
+def gestiones_caso(request, pk):
+    """Registra la gestión siguiente (2 o 3) de un caso. Bloquea el caso mientras se numera
+    para que dos personas no registren la misma gestión a la vez."""
+    exigir(request, P.PERM_REGISTRAR)
+    datos = leer_json(request)
+    if not casos_visibles(request.user).filter(pk=pk).exists():
+        raise ErrorApi('no_encontrado', status=404)
+
+    with transaction.atomic():
+        caso = CasoSocial.objects.select_for_update().get(pk=pk)
+        previas = list(caso.gestiones.order_by('numero'))
+        if len(previas) >= CasoSocial.MAX_GESTIONES:
+            raise ErrorApi('gestiones_completas', 'caso', status=409)
+        valores = _validar_gestion(datos, minima=previas[-1].fecha if previas else None)
+        try:
+            GestionSocial.objects.create(caso=caso, numero=len(previas) + 1,
+                                         atendido_por=request.user, **valores)
+        except IntegrityError:
+            raise ErrorApi('conflicto', 'caso', status=409)
+    return JsonResponse(serializar_caso(_casos_base().get(pk=pk)), status=201)

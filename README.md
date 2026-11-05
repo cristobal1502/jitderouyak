@@ -41,6 +41,8 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
    pip install -r requirements.txt
    ```
 
+3b. Copia `.env.example` como `.env` y completa tus datos (base de datos y correo). Si no creas `.env`, se usan los valores por defecto.
+
 4. Crea la base de datos en MySQL. Con XAMPP/WAMP, inicia MySQL, abre **phpMyAdmin** (`http://localhost/phpmyadmin`), pestaña **SQL**, y ejecuta:
    ```sql
    CREATE DATABASE sgr_municipal CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -74,6 +76,29 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
 ## Si ya tienes otro proyecto Django
 
 Este paquete ya es un proyecto completo y ejecutable (`manage.py` + carpeta `sgr/`). Si prefieres integrarlo a un proyecto existente, copia `dashboard/`, `login/`, `templates/` y `static/` a su raíz y aplica `settings_snippet.py`. Los diagramas de requerimientos están en `docs/`.
+
+## Despliegue en AWS (EC2 con IP elástica)
+
+La IP **no está escrita en el código**: se configura en el archivo `.env` del servidor.
+
+1. En el servidor clona el repositorio, crea el entorno virtual e instala `pip install -r requirements.txt`.
+2. Crea `.env` (copia de `.env.example`) con, como mínimo:
+   ```
+   SECRET_KEY=<clave larga y aleatoria>
+   DEBUG=False
+   ALLOWED_HOSTS=<IP elástica>,<dominio si tienes>
+   CSRF_TRUSTED_ORIGINS=http://<IP elástica>      # https://<dominio> si usas HTTPS
+   DB_NAME=...  DB_USER=...  DB_PASSWORD=...  DB_HOST=<localhost o endpoint de RDS>
+   EMAIL_HOST_USER=...  EMAIL_HOST_PASSWORD=...
+   ```
+3. Crea la base de datos MySQL/MariaDB (local en la EC2 o en RDS) y ejecuta:
+   ```bash
+   python manage.py migrate
+   python manage.py collectstatic --noinput
+   python manage.py cargar_datos_iniciales --admin-password "<clave segura>"
+   ```
+4. Ejecuta con gunicorn (idealmente detrás de nginx): `gunicorn sgr.wsgi:application --bind 0.0.0.0:8000`.
+5. En el **Security Group** de la EC2 abre el puerto 80/443 (o 8000 si pruebas sin nginx) y el 22 solo para tu IP. El puerto 3306 de MySQL **no** debe quedar abierto a internet.
 
 ## Roles, permisos y alcance
 
@@ -123,3 +148,17 @@ static/
 ```
 
 > La base de datos vive en MySQL (se consulta en phpMyAdmin). Tablas principales: `dashboard_delegacion`, `dashboard_rol`, `dashboard_perfil`, `dashboard_itemmeta`, `dashboard_tipoatencion`, `dashboard_subatencion`, `dashboard_atencion`, `auth_user`, `login_codigorecuperacion`.
+
+## Evaluación Sumativa #3 — resumen de cumplimiento
+
+**Dashboards por perfil** (`/dashboard/`, datos reales de la BD según permisos y alcance del rol):
+- *Administrador* (permiso "Gestionar usuarios"): usuarios, delegaciones, todos los mantenedores, distribución por rol/delegación/tipo.
+- *Supervisor* (permisos intermedios): indicadores de sus delegaciones, mantenedores autorizados, equipo.
+- *Administrativo* (solo registra): sus propias atenciones y casos; administración restringida (403).
+
+**Transacciones**: (1) Registro de atenciones (`/api/atenciones/`) y (2) Casos sociales (`/api/casos/`, `/api/casos/<id>/gestiones/`):
+caso + gestión 1 se crean en un `transaction.atomic()`; máximo 3 gestiones, RUT validado (módulo 11) y fechas no retroactivas.
+
+**Usuarios demo** (clave `Demo1234!`): laura.mena (Supervisor), diego.vera (Administrativo), juan.perez / carla.tapia (Funcionario). Admin: `admin` / `Admin123!`.
+
+**Actualizar el servidor**: `git pull && source entornito/bin/activate && python manage.py migrate && python manage.py cargar_datos_iniciales --demo && python manage.py collectstatic --noinput && sudo systemctl restart sgr`

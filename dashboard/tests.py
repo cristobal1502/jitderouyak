@@ -373,3 +373,105 @@ class PerfilPropio(BaseApi):
         html = self.client.get(reverse('configuraciones')).content.decode()
         self.assertIn('value="juan.perez@municipalidad.cl"', html)
         self.assertIn('value="Funcionario"', html)
+
+
+# ------------------------------------------------------------ casos sociales
+from .models import CasoSocial, GestionSocial  # noqa: E402
+
+
+class CasosSociales(BaseApi):
+    def nuevo(self, **extra):
+        d = {'nombre': 'Rosa Pizarro Vega', 'rut': '11.111.111-1', 'telefono': '+56 9 5555 1111',
+             'sector': 'Peñuelas', 'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk,
+             'tipoId': TipoAtencion.objects.get(codigo='TAT-001').pk,
+             'detalle': 'Primera entrevista con la persona.', 'fecha': '2026-09-01'}
+        d.update(extra)
+        return d
+
+    def test_crear_caso_es_atomico_con_gestion_1(self):
+        self.entrar('juan.perez')
+        r = self.api('post', 'casos/', self.nuevo())
+        self.assertEqual(r.status_code, 201, r.content)
+        c = CasoSocial.objects.get(rut='11.111.111-1')
+        self.assertEqual(c.gestiones.count(), 1)
+        self.assertEqual(c.gestiones.first().numero, 1)
+
+    def test_si_falla_la_gestion_no_queda_el_caso(self):
+        self.entrar('juan.perez')
+        antes = CasoSocial.objects.count()
+        r = self.api('post', 'casos/', self.nuevo(detalle='corto'))
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(CasoSocial.objects.count(), antes)
+
+    def test_rut_invalido_y_duplicado(self):
+        self.entrar('juan.perez')
+        r = self.api('post', 'casos/', self.nuevo(rut='12.345.678-9'))
+        self.assertEqual(self.json(r)['error'], 'rut_invalido')
+        r = self.api('post', 'casos/', self.nuevo(rut='12.345.678-5'))  # ya existe CS-001
+        self.assertEqual(self.json(r)['error'], 'duplicado')
+
+    def test_maximo_tres_gestiones_y_fecha_no_anterior(self):
+        self.entrar('carla.tapia')
+        caso = CasoSocial.objects.get(codigo='CS-001')
+        g = {'tipoId': TipoAtencion.objects.get(codigo='TAT-004').pk,
+             'detalle': 'Derivación a la red comunal.', 'fecha': '2026-08-01'}
+        r = self.api('post', f'casos/{caso.pk}/gestiones/', g)
+        self.assertEqual(self.json(r)['error'], 'fecha_anterior')
+        g['fecha'] = '2026-09-01'
+        self.assertEqual(self.api('post', f'casos/{caso.pk}/gestiones/', g).status_code, 201)
+        r = self.api('post', f'casos/{caso.pk}/gestiones/', g)
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(self.json(r)['error'], 'gestiones_completas')
+        self.assertEqual(caso.gestiones.count(), 3)
+
+    def test_alcance_y_permisos(self):
+        self.entrar('juan.perez')  # Propio
+        codigos = [c['codigo'] for c in self.json(self.api('get', 'casos/'))]
+        self.assertEqual(codigos, ['CS-002'])
+        caso_ajeno = CasoSocial.objects.get(codigo='CS-001')
+        self.assertEqual(self.api('post', f'casos/{caso_ajeno.pk}/gestiones/', {}).status_code, 404)
+        self.entrar_admin()
+        self.assertEqual(len(self.json(self.api('get', 'casos/'))), 2)
+        # Verificador activo sin permiso de registrar
+        u = User.objects.get(username='ana.nunez'); u.is_active = True; u.save()
+        self.entrar('ana.nunez')
+        self.assertEqual(self.api('post', 'casos/', self.nuevo()).status_code, 403)
+
+
+# ------------------------------------------------------------ dashboards
+class DashboardsPorPerfil(BaseApi):
+    def html(self, usuario, password='Demo1234!'):
+        self.entrar(usuario, password)
+        r = self.client.get(reverse('dashboard'))
+        self.assertEqual(r.status_code, 200)
+        return r.content.decode()
+
+    def test_administrador(self):
+        h = self.html('admin', 'Admin123!')
+        self.assertIn('Dashboard Administrador', h)
+        self.assertIn('bloqueMantenedores', h)
+        self.assertIn('bloqueRoles', h)
+        self.assertIn('Usuarios activos', h)
+
+    def test_supervisor(self):
+        h = self.html('laura.mena')
+        self.assertIn('Dashboard Supervisor', h)
+        self.assertIn('bloqueMantenedores', h)
+        self.assertIn('bloqueEquipo', h)
+        self.assertNotIn('bloqueRoles', h)
+        self.assertNotIn('/administracion/usuarios', h)  # sin Gestionar usuarios
+
+    def test_administrativo(self):
+        h = self.html('diego.vera')
+        self.assertIn('Mi panel', h)
+        self.assertNotIn('bloqueMantenedores', h)
+        self.assertIn('bloqueRestriccion', h)
+        self.assertNotIn('nav-tag', h)
+        self.assertEqual(self.client.get(reverse('administracion', args=['usuarios'])).status_code, 403)
+
+    def test_datos_reales_segun_alcance(self):
+        # Funcionario (Propio) ve solo sus atenciones; administrador ve todas
+        self.assertIn('AT-002', self.html('juan.perez'))
+        self.assertNotIn('AT-001', self.html('juan.perez'))
+        h = self.html('admin', 'Admin123!')
+        self.assertIn('AT-001', h); self.assertIn('AT-002', h)

@@ -12,7 +12,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from dashboard.models import (
-    Atencion, Delegacion, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
+    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
 )
 
 ROLES = [
@@ -29,6 +29,13 @@ ROLES = [
      ['Ver panel', 'Registrar actividades'], 'Propio'),
     ('Usuario de consulta', 'Consulta y exporta información.',
      ['Ver panel', 'Exportar informes'], 'Todas las delegaciones'),
+    # Los tres perfiles base de la evaluación (cada uno con su propio dashboard):
+    # Administrador (arriba) = acceso total · Supervisor = permisos intermedios · Administrativo = permisos mínimos
+    ('Supervisor', 'Supervisa la operación de sus delegaciones: valida evidencias, gestiona agenda y catálogos.',
+     ['Ver panel', 'Registrar actividades', 'Validar evidencias', 'Gestionar agenda',
+      'Administrar catálogos', 'Exportar informes'], 'Delegación'),
+    ('Administrativo', 'Registra atenciones y casos propios. Sin acceso a administración.',
+     ['Ver panel', 'Registrar actividades'], 'Propio'),
 ]
 
 DELEGACIONES = [
@@ -69,6 +76,20 @@ USUARIOS_DEMO = [
     ('maria.rojas', 'María Rojas', 'maria.rojas@municipalidad.cl', 'Delegado / Jefatura', ['DEL-002'], True),
     ('pedro.soto', 'Pedro Soto', 'pedro.soto@municipalidad.cl', 'Administrador', ['DEL-001', 'DEL-002', 'DEL-003'], True),
     ('ana.nunez', 'Ana Núñez', 'ana.nunez@municipalidad.cl', 'Verificador', ['DEL-001'], False),
+    ('laura.mena', 'Laura Mena', 'laura.mena@municipalidad.cl', 'Supervisor', ['DEL-001', 'DEL-002'], True),
+    ('diego.vera', 'Diego Vera', 'diego.vera@municipalidad.cl', 'Administrativo', ['DEL-001'], True),
+]
+
+# (código, nombre, RUT, teléfono, sector, delegación, creado por, [(tipo, detalle, fecha, atendido por)])
+CASOS_DEMO = [
+    ('CS-001', 'María Morales Carrasco', '12.345.678-5', '+56 9 8765 4321', 'Tierras Blancas', 'DEL-003', 'carla.tapia', [
+        ('TAT-001', 'Entrevista en delegación y diagnóstico socioeconómico preliminar.', date(2026, 8, 2), 'carla.tapia'),
+        ('TAT-002', 'Visita en domicilio para verificar condiciones de techumbre tras precipitaciones.', date(2026, 8, 20), 'carla.tapia'),
+    ]),
+    ('CS-002', 'Carlos Araya Godoy', '9.876.543-3', '+56 9 1122 3344', 'Coquimbo Oriente', 'DEL-001', 'juan.perez', [
+        ('TAT-001', 'Entrevista inicial y levantamiento de antecedentes.', date(2026, 7, 28), 'juan.perez'),
+        ('TAT-004', 'Derivación a red de apoyo comunal para seguimiento.', date(2026, 8, 15), 'juan.perez'),
+    ]),
 ]
 
 
@@ -151,6 +172,14 @@ class Command(BaseCommand):
                 Atencion.objects.get_or_create(codigo=codigo, defaults={
                     'solicitante': sol, 'tipo': tipos[tipo], 'subatencion': subs[sub], 'descripcion': desc,
                     'delegacion': dels[deleg], 'responsable': resp, 'fecha': fecha, 'creado_por': admin_user})
+            for codigo, nombre, rut, tel, sector, deleg, creador, gestiones in CASOS_DEMO:
+                caso, nuevo = CasoSocial.objects.get_or_create(codigo=codigo, defaults={
+                    'nombre': nombre, 'rut': rut, 'telefono': tel, 'sector': sector,
+                    'delegacion': dels[deleg], 'creado_por': User.objects.get(username=creador)})
+                if nuevo:
+                    for numero, (tipo, detalle, fecha, atiende) in enumerate(gestiones, start=1):
+                        GestionSocial.objects.create(caso=caso, numero=numero, tipo=tipos[tipo], detalle=detalle,
+                                                     fecha=fecha, atendido_por=User.objects.get(username=atiende))
             self.stdout.write(self.style.SUCCESS('Datos de ejemplo cargados (contraseña de los usuarios demo: Demo1234!).'))
 
         self.stdout.write(self.style.SUCCESS('Listo: roles, catálogos y administrador.'))

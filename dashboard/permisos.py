@@ -17,6 +17,9 @@ PERMISOS = [
 PERM_USUARIOS = 'Gestionar usuarios'
 PERM_CATALOGOS = 'Administrar catálogos'
 PERM_REGISTRAR = 'Registrar actividades'
+PERM_VALIDAR = 'Validar evidencias'
+PERM_AGENDA = 'Gestionar agenda'
+PERM_EXPORTAR = 'Exportar informes'
 
 ALCANCE_TODAS = 'Todas las delegaciones'
 ALCANCE_DELEGACION = 'Delegación'
@@ -65,3 +68,18 @@ def iniciales(user):
     partes = nombre_visible(user).split()
     letras = ''.join(p[0] for p in partes[:2])
     return (letras or user.username[:2]).upper()
+
+
+# Perfiles de dashboard. Se deducen de los permisos del rol (no del nombre), así
+# cualquier rol nuevo que se cree en Administración cae en el panel que le corresponde.
+DASH_ADMINISTRADOR = 'administrador'   # acceso total: gestiona usuarios
+DASH_SUPERVISOR = 'supervisor'         # permisos intermedios: supervisa / administra catálogos / valida
+DASH_ADMINISTRATIVO = 'administrativo' # permisos mínimos: solo registra
+
+
+def tipo_dashboard(user):
+    if user.is_superuser or tiene_permiso(user, PERM_USUARIOS):
+        return DASH_ADMINISTRADOR
+    if any(tiene_permiso(user, p) for p in (PERM_CATALOGOS, PERM_VALIDAR, PERM_AGENDA, PERM_EXPORTAR)):
+        return DASH_SUPERVISOR
+    return DASH_ADMINISTRATIVO

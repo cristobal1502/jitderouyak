@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/styles.css">
 </head>
-<body>
+<body data-api="{% url 'api_raiz' %}" data-csrf="{{ csrf_token }}" data-login-url="{% url 'login' %}" data-puede-registrar="{{ sgr_puede_registrar|yesno:'1,0' }}">
 
 <header class="topbar">
   <div class="brand">
@@ -67,7 +67,7 @@
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
       Configuraciones
     </a>
-    <div class="sidebar-foot">SGR Municipal · v2.4<br>Municipalidad de La Serena</div>
+    <div class="sidebar-foot">SGR Municipal · v2.4<br>Delegación Coquimbo</div>
   </nav>
 
   <main class="content content-wide">
@@ -76,10 +76,12 @@
         <h1>Casos y atenciones sociales</h1>
         <div class="subtitle">Historial secuencial de atenciones diferenciadas por persona usuaria (hasta 3 gestiones)</div>
       </div>
+      {% if sgr_puede_registrar %}
       <button class="btn-primary" id="openModalBtn">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
         Nueva atención social
       </button>
+      {% endif %}
     </div>
 
     <div class="search-bar">
@@ -117,23 +119,22 @@
             </div>
             <div class="field">
               <label for="uTelefono">Teléfono</label>
-              <input type="tel" id="uTelefono" placeholder="+56 9 8765 4321">
+              <input type="tel" id="uTelefono" placeholder="+56 9 8765 4321" maxlength="30">
             </div>
           </div>
           <div class="field">
             <label for="uSector">Sector <span class="required">*</span></label>
             <input type="text" id="uSector" placeholder="Ej: Tierras Blancas">
           </div>
+          <div class="field">
+            <label for="uDelegacion">Delegación <span class="required">*</span></label>
+            <select id="uDelegacion"></select>
+          </div>
         </div>
 
         <div class="field">
           <label for="gTipo">Tipo de gestión <span class="required">*</span></label>
-          <select id="gTipo">
-            <option value="Atención inicial / Ficha FIBE">Atención inicial / Ficha FIBE</option>
-            <option value="Visita a terreno / Verificación habitacional">Visita a terreno / Verificación habitacional</option>
-            <option value="Entrega de beneficio municipal">Entrega de beneficio municipal</option>
-            <option value="Derivación a otra red">Derivación a otra red</option>
-          </select>
+          <select id="gTipo"></select>
         </div>
         <div class="field">
           <label for="gDetalle">Detalle de la gestión <span class="required">*</span></label>
@@ -153,6 +154,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/api.js"></script>
 <script src="/static/js/casos-sociales.js"></script>
 </body>
 </html>

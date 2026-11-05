@@ -1,6 +1,7 @@
 import re
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
@@ -87,6 +88,9 @@ def _enviar_codigo(user):
         f'Hola,\n\nTu código de verificación es: {codigo}\n\n'
         f'Vence en {minutos} minutos. Si no lo solicitaste, ignora este mensaje.',
         user.email)
+    if settings.DEBUG:
+        # Solo en desarrollo: así puedes continuar la prueba aunque el correo no se haya podido enviar.
+        print(f'[DEBUG] Código de recuperación para {user.email}: {codigo}', flush=True)
 
 
 def forgot_password_view(request):

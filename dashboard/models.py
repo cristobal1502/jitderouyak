@@ -122,3 +122,51 @@ class Atencion(models.Model):
 
     def __str__(self):
         return f'{self.codigo} · {self.solicitante}'
+
+
+class CasoSocial(models.Model):
+    """Persona usuaria con su historial de gestiones (máximo 3, RF-015)."""
+    MAX_GESTIONES = 3
+
+    codigo = models.CharField(max_length=20, unique=True)
+    nombre = models.CharField(max_length=150)
+    rut = models.CharField(max_length=12, unique=True)  # guardado con formato 12.345.678-9
+    telefono = models.CharField(max_length=30, blank=True)
+    sector = models.CharField(max_length=120)
+    delegacion = models.ForeignKey(Delegacion, on_delete=models.PROTECT, related_name='casos')
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='casos_creados')
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+        verbose_name = 'caso social'
+        verbose_name_plural = 'casos sociales'
+
+    def __str__(self):
+        return f'{self.codigo} · {self.nombre}'
+
+
+class GestionSocial(models.Model):
+    """Una gestión (atención) dentro de un caso social. Se numera 1, 2 y 3."""
+    caso = models.ForeignKey(CasoSocial, on_delete=models.CASCADE, related_name='gestiones')
+    numero = models.PositiveSmallIntegerField()
+    tipo = models.ForeignKey(TipoAtencion, on_delete=models.PROTECT, related_name='gestiones')
+    detalle = models.TextField()
+    fecha = models.DateField()
+    atendido_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                                     related_name='gestiones_atendidas')
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['caso', 'numero']
+        verbose_name = 'gestión social'
+        verbose_name_plural = 'gestiones sociales'
+        constraints = [
+            models.UniqueConstraint(fields=['caso', 'numero'], name='gestion_numero_unico_por_caso'),
+            models.CheckConstraint(condition=models.Q(numero__gte=1, numero__lte=3),
+                                   name='gestion_numero_entre_1_y_3'),
+        ]
+
+    def __str__(self):
+        return f'{self.caso.codigo} · gestión {self.numero}'
