@@ -60,6 +60,12 @@ def delegaciones_de(user):
     return perfil.delegaciones.all() if perfil else Delegacion.objects.none()
 
 
+def es_delegado(user):
+    """True si el rol del usuario es de Delegado (p. ej. 'Delegado' o 'Delegado / Jefatura')."""
+    perfil = perfil_de(user)
+    return bool(perfil and perfil.rol.nombre.strip().lower().startswith('delegado'))
+
+
 def nombre_visible(user):
     return user.get_full_name().strip() or user.first_name or user.username
 

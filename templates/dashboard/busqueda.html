@@ -55,6 +55,10 @@
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       Búsqueda / filtro
     </a>
+    <a class="nav-item" href="{% url 'organizaciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M14.5 14.2c.8-.3 1.6-.4 2.5-.4 2.8 0 5 2.2 5 5"/></svg>
+      Organizaciones
+    </a>
     <div class="nav-group-label">Sistema</div>
     {% if sgr_puede_admin %}
     <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">
@@ -116,6 +120,12 @@
               <option value="">Todas las sub atenciones</option>
             </select>
           </div>
+          <div class="filter-field">
+            <label for="fClasificacion">Clasificación</label>
+            <select id="fClasificacion">
+              <option value="">Todas</option>
+            </select>
+          </div>
           <div class="filter-field filter-field-range">
             <label>Rango de fechas</label>
             <div class="date-range">
@@ -129,7 +139,7 @@
         <div class="filters-keywords-row">
           <div class="filter-field filter-field-grow">
             <label for="fPalabras">Palabras clave</label>
-            <input type="text" id="fPalabras" placeholder="Código, solicitante, descripción, tipo…" maxlength="100">
+            <input type="text" id="fPalabras" placeholder="Código, vecino(a), teléfono, descripción, tipo…" maxlength="100">
           </div>
           <div class="filters-actions">
             <button class="btn-secondary" id="clearFiltersBtn">Limpiar</button>
@@ -162,7 +172,7 @@
             <th style="width:120px;">Funcionario</th>
             <th style="width:130px;">Delegación</th>
             <th style="width:170px;">Tipo / Sub atención</th>
-            <th style="width:150px;">Solicitante</th>
+            <th style="width:150px;">Vecino(a)</th>
             <th>Descripción</th>
           </tr>
         </thead>

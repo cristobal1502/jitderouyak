@@ -8,7 +8,10 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Atencion, Delegacion, Rol, SubAtencion, TipoAtencion
+from unittest import mock
+
+from .api import limite_ingreso, primera_fecha_abierta
+from .models import Atencion, Delegacion, OrganizacionComunitaria, Rol, SubAtencion, TipoAtencion
 
 
 # Hasher rápido solo para las pruebas (PBKDF2 hace que cada login tarde ~0,1 s)
@@ -247,7 +250,7 @@ class Usuarios(BaseApi):
 class Atenciones(BaseApi):
     def datos(self, **cambios):
         tipo = TipoAtencion.objects.get(codigo='TAT-001')
-        d = {'solicitante': 'Pedro Pablo', 'tipoId': tipo.pk,
+        d = {'solicitante': 'Pedro Pablo', 'telefono': '+56 9 1234 5678', 'tipoId': tipo.pk,
              'subId': SubAtencion.objects.get(codigo='SUB-001').pk,
              'descripcion': 'Descripción suficientemente larga',
              'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk,
@@ -608,3 +611,140 @@ class BusquedaAvanzada(BaseApi):
         self.assertNotIn('AT-101', html)
         d1 = Delegacion.objects.get(codigo='DEL-001')
         self.assertEqual(self.client.get(reverse('busqueda_imprimir') + f'?delegacion={d1.pk}').status_code, 403)
+
+
+
+class ReglasMatrizSGR(BaseApi):
+    """Candados del ingreso de actividades (Matriz SGR)."""
+    datos = Atenciones.datos
+
+    def test_nombre_y_telefono_obligatorios(self):
+        self.entrar('juan.perez')
+        for cambio, esperado in [({'solicitante': ''}, ('campo_vacio', 'solicitante')),
+                                 ({'telefono': ''}, ('campo_vacio', 'telefono')),
+                                 ({'telefono': '   '}, ('campo_vacio', 'telefono')),
+                                 ({'telefono': '1234'}, ('telefono_invalido', 'telefono')),
+                                 ({'telefono': 'llamar luego'}, ('telefono_invalido', 'telefono'))]:
+            r = self.json(self.api('post', 'atenciones/', self.datos(**cambio)))
+            self.assertEqual((r['error'], r['campo']), esperado, cambio)
+        r = self.api('post', 'atenciones/', self.datos(telefono='(51) 222-3344'))
+        self.assertEqual((r.status_code, self.json(r)['telefono']), (201, '(51) 222-3344'))
+
+    def test_delegado_como_solicitante_es_otra_gestion(self):
+        self.entrar('juan.perez')
+        r = self.json(self.api('post', 'atenciones/', self.datos()))
+        self.assertEqual(r['clasificacion'], 'Atención ciudadana')
+        # marcado a mano en el formulario
+        r = self.json(self.api('post', 'atenciones/', self.datos(solicitanteEsDelegado=True)))
+        self.assertEqual(r['clasificacion'], 'Otra gestión')
+        # detectado por nombre: Laura Mena es Supervisor (no Delegado) → sigue siendo ciudadana
+        r = self.json(self.api('post', 'atenciones/', self.datos(solicitante='Laura Mena')))
+        self.assertEqual(r['clasificacion'], 'Atención ciudadana')
+        # María Rojas es Delegado / Jefatura de DEL-002: si es la solicitante, se detecta sola
+        self.entrar_admin()
+        d2 = Delegacion.objects.get(codigo='DEL-002').pk
+        maria = User.objects.get(username='maria.rojas').pk
+        r = self.json(self.api('post', 'atenciones/', self.datos(
+            solicitante='  maria ROJAS ', delegacionId=d2, responsableId=maria)))
+        self.assertEqual(r['clasificacion'], 'Otra gestión')
+
+    def test_maximo_siete_por_dia(self):
+        self.entrar('juan.perez')
+        for _ in range(Atencion.MAX_POR_DIA):
+            self.assertEqual(self.api('post', 'atenciones/', self.datos()).status_code, 201)
+        r = self.api('post', 'atenciones/', self.datos())
+        self.assertEqual((r.status_code, self.json(r)['error']), (400, 'limite_diario'))
+        # otro día sí se puede
+        ayer = timezone.localdate() - timedelta(days=1)
+        if ayer >= primera_fecha_abierta():
+            self.assertEqual(self.api('post', 'atenciones/', self.datos(fecha=ayer.isoformat())).status_code, 201)
+        # y otro funcionario el mismo día también
+        self.entrar_admin()
+        carla = User.objects.get(username='carla.tapia').pk
+        self.assertEqual(self.api('post', 'atenciones/', self.datos(responsableId=carla)).status_code, 201)
+
+    def test_limite_de_ingreso_es_el_lunes_siguiente(self):
+        self.assertEqual(limite_ingreso(date(2026, 11, 9)), date(2026, 11, 16))   # lunes → lunes siguiente
+        self.assertEqual(limite_ingreso(date(2026, 11, 13)), date(2026, 11, 16))  # viernes → lunes
+        self.assertEqual(primera_fecha_abierta(date(2026, 11, 16)), date(2026, 11, 9))   # lunes: aún la anterior
+        self.assertEqual(primera_fecha_abierta(date(2026, 11, 17)), date(2026, 11, 16))  # martes: solo esta semana
+
+    def test_cierre_semanal(self):
+        self.entrar('juan.perez')
+        viernes = date(2026, 11, 13)
+        with mock.patch('dashboard.api.timezone.localdate', return_value=date(2026, 11, 16)):  # lunes
+            r = self.api('post', 'atenciones/', self.datos(fecha=viernes.isoformat()))
+            self.assertEqual(r.status_code, 201)
+        with mock.patch('dashboard.api.timezone.localdate', return_value=date(2026, 11, 17)):  # martes
+            r = self.api('post', 'atenciones/', self.datos(fecha=viernes.isoformat()))
+            self.assertEqual((r.status_code, self.json(r)['error'], self.json(r)['detalle']),
+                             (400, 'semana_cerrada', '2026-11-16'))
+            r = self.api('post', 'atenciones/', self.datos(fecha='2026-11-16'))  # lunes de la semana actual
+            self.assertEqual(r.status_code, 201)
+            op = self.json(self.api('get', 'opciones-atencion/'))
+            self.assertEqual((op['fechaMinima'], op['maxPorDia']), ('2026-11-16', 7))
+
+    def test_busqueda_por_clasificacion(self):
+        self.entrar('juan.perez')
+        self.api('post', 'atenciones/', self.datos(solicitanteEsDelegado=True))
+        r = self.json(self.api('get', 'busqueda/?clasificacion=Otra+gesti%C3%B3n'))
+        self.assertEqual(r['total'], 1)
+        self.assertEqual(self.api('get', 'busqueda/?clasificacion=x').status_code, 400)
+
+
+class Organizaciones(BaseApi):
+    def datos(self, **cambios):
+        d = {'nombre': 'Club Deportivo Nuevo', 'tipo': OrganizacionComunitaria.FUNCIONAL,
+             'subcategoria': 'Organización Deportiva', 'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk,
+             'sector': 'Centro', 'representante': '', 'telefono': '', 'verificacion': 'Pendiente de revisión',
+             'estado': 'Activo'}
+        d.update(cambios)
+        return d
+
+    def test_todos_consultan_solo_catalogos_editan(self):
+        self.entrar('juan.perez')
+        self.assertEqual(self.client.get(reverse('organizaciones')).status_code, 200)
+        self.assertIn('data-solo-lectura="1"', self.client.get(reverse('organizaciones')).content.decode())
+        self.assertEqual(len(self.json(self.api('get', 'organizaciones/'))), 6)
+        self.assertEqual(self.api('post', 'organizaciones/', self.datos()).status_code, 403)
+        self.entrar_admin()
+        self.assertIn('data-solo-lectura="0"', self.client.get(reverse('organizaciones')).content.decode())
+        r = self.api('post', 'organizaciones/', self.datos())
+        self.assertEqual((r.status_code, self.json(r)['codigo']), (201, 'ORG-007'))
+
+    def test_subfamilia(self):
+        self.entrar_admin()
+        r = self.json(self.api('post', 'organizaciones/', self.datos(subcategoria='')))
+        self.assertEqual((r['error'], r['campo']), ('campo_vacio', 'subcategoria'))
+        r = self.json(self.api('post', 'organizaciones/', self.datos(subcategoria='Otra cosa')))
+        self.assertEqual(r['error'], 'referencia_invalida')
+        # las juntas de vecinos (territoriales) no llevan subfamilia
+        r = self.json(self.api('post', 'organizaciones/', self.datos(tipo=OrganizacionComunitaria.TERRITORIAL)))
+        self.assertEqual(r['subcategoria'], '')
+        self.assertEqual(r['verificacion'], 'Pendiente de revisión')
+
+    def test_verificar(self):
+        self.entrar_admin()
+        org = OrganizacionComunitaria.objects.get(codigo='ORG-002')
+        datos = self.json(self.api('get', 'organizaciones/'))[1]
+        datos['verificacion'] = 'Verificado'
+        self.assertEqual(self.api('put', f'organizaciones/{org.pk}/', datos).status_code, 200)
+        org.refresh_from_db()
+        self.assertEqual(org.verificacion, 'Verificado')
+
+    def test_supervisor_solo_en_sus_delegaciones(self):
+        self.entrar('laura.mena')  # Supervisor de DEL-001 y DEL-002
+        d3 = Delegacion.objects.get(codigo='DEL-003').pk
+        self.assertEqual(self.api('post', 'organizaciones/', self.datos(delegacionId=d3)).status_code, 403)
+        self.assertEqual(self.api('post', 'organizaciones/', self.datos()).status_code, 201)
+        org = OrganizacionComunitaria.objects.get(codigo='ORG-004')  # DEL-003
+        self.assertEqual(self.api('delete', f'organizaciones/{org.pk}/').status_code, 403)
+
+    def test_delegacion_con_organizaciones_no_se_elimina(self):
+        self.entrar_admin()
+        OrganizacionComunitaria.objects.create(
+            codigo='ORG-900', nombre='X', tipo=OrganizacionComunitaria.TERRITORIAL, sector='x',
+            delegacion=Delegacion.objects.create(codigo='DEL-900', nombre='T', direccion='x', comuna='y'))
+        d = Delegacion.objects.get(codigo='DEL-900')
+        r = self.api('delete', f'delegaciones/{d.pk}/')
+        self.assertEqual((r.status_code, self.json(r)['error']), (409, 'en_uso'))

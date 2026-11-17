@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/styles.css">
 </head>
-<body data-entidad="{{ entidad }}" data-api="{% url 'api_raiz' %}" data-csrf="{{ csrf_token }}" data-login-url="{% url 'login' %}">
+<body data-entidad="{{ entidad }}" data-solo-lectura="{{ solo_lectura|yesno:'1,0' }}" data-api="{% url 'api_raiz' %}" data-csrf="{{ csrf_token }}" data-login-url="{% url 'login' %}">
 
 <header class="topbar">
   <div class="brand">
@@ -55,9 +55,13 @@
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       Búsqueda / filtro
     </a>
+    <a class="nav-item{% if entidad == 'organizaciones' %} active{% endif %}" href="{% url 'organizaciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M14.5 14.2c.8-.3 1.6-.4 2.5-.4 2.8 0 5 2.2 5 5"/></svg>
+      Organizaciones
+    </a>
     <div class="nav-group-label">Sistema</div>
     {% if sgr_puede_admin %}
-    <a class="nav-item active" href="{% url 'administracion' sgr_admin_inicial %}">
+    <a class="nav-item{% if entidad != 'organizaciones' %} active{% endif %}" href="{% url 'administracion' sgr_admin_inicial %}">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.36.68.64.92"/></svg>
       Administración
       <span class="nav-tag">admin</span>
@@ -73,11 +77,17 @@
   <main class="content content-wide">
     <div class="page-heading">
       <div>
+        {% if entidad == 'organizaciones' %}
+        <h1>Organizaciones comunitarias</h1>
+        <div class="subtitle">Juntas de vecinos y organizaciones funcionales del sector{% if solo_lectura %} · solo consulta{% endif %}</div>
+        {% else %}
         <h1>Administración</h1>
         <div class="subtitle">Mantenedores del sistema · acceso restringido a administradores</div>
+        {% endif %}
       </div>
     </div>
 
+    {% if entidad != 'organizaciones' %}
     <div class="admin-tabs">
       {% if sgr_puede_catalogos %}<a class="admin-tab {% if entidad == 'delegaciones' %}active{% endif %}" href="{% url 'administracion' 'delegaciones' %}">Delegaciones</a>{% endif %}
       {% if sgr_puede_usuarios %}<a class="admin-tab {% if entidad == 'roles' %}active{% endif %}" href="{% url 'administracion' 'roles' %}">Roles</a>
@@ -86,6 +96,7 @@
       <a class="admin-tab {% if entidad == 'tipos-atencion' %}active{% endif %}" href="{% url 'administracion' 'tipos-atencion' %}">Tipos de atención</a>
       <a class="admin-tab {% if entidad == 'sub-atenciones' %}active{% endif %}" href="{% url 'administracion' 'sub-atenciones' %}">Sub atenciones</a>{% endif %}
     </div>
+    {% endif %}
 
     <div class="section-head">
       <h2 id="crudTitulo"></h2>
@@ -98,7 +109,10 @@
         <span class="toolbar-count" id="contador"></span>
       </div>
       <div class="toolbar-right">
-        <button type="button" class="btn-primary" id="nuevoBtn">
+        {% if entidad == 'organizaciones' %}
+        <select class="toolbar-filter" id="filtroExtra" aria-label="Filtrar"></select>
+        {% endif %}
+        <button type="button" class="btn-primary" id="nuevoBtn"{% if solo_lectura %} hidden{% endif %}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
           <span id="nuevoLabel">Nuevo</span>
         </button>

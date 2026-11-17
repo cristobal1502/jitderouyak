@@ -184,3 +184,13 @@ def administracion(request, entidad):
     if not P.tiene_permiso(request.user, permiso):
         raise PermissionDenied
     return render(request, 'dashboard/crud.html', {'entidad': entidad})
+
+
+@login_required
+def organizaciones(request):
+    """Registro de organizaciones comunitarias: todos lo consultan; lo editan quienes
+    tienen «Administrar catálogos»."""
+    return render(request, 'dashboard/crud.html', {
+        'entidad': 'organizaciones',
+        'solo_lectura': not P.tiene_permiso(request.user, P.PERM_CATALOGOS),
+    })

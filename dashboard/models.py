@@ -102,8 +102,15 @@ class SubAtencion(models.Model):
 
 
 class Atencion(models.Model):
+    CIUDADANA = 'Atención ciudadana'
+    OTRA_GESTION = 'Otra gestión'   # el solicitante es el propio Delegado: no cuenta como atención ciudadana
+    CLASIFICACIONES = [(CIUDADANA, CIUDADANA), (OTRA_GESTION, OTRA_GESTION)]
+    MAX_POR_DIA = 7                 # actividades por funcionario en un mismo día
+
     codigo = models.CharField(max_length=20, unique=True)
     solicitante = models.CharField(max_length=150)
+    telefono = models.CharField(max_length=30, blank=True, default='')  # teléfono del vecino
+    clasificacion = models.CharField(max_length=30, choices=CLASIFICACIONES, default=CIUDADANA)
     tipo = models.ForeignKey(TipoAtencion, on_delete=models.PROTECT, related_name='atenciones')
     subatencion = models.ForeignKey(SubAtencion, on_delete=models.PROTECT, related_name='atenciones')
     descripcion = models.TextField()
@@ -170,3 +177,39 @@ class GestionSocial(models.Model):
 
     def __str__(self):
         return f'{self.caso.codigo} · gestión {self.numero}'
+
+
+class OrganizacionComunitaria(models.Model):
+    """Juntas de vecinos (territoriales) y organizaciones funcionales del sector."""
+    TERRITORIAL = 'Territorial (Junta de Vecinos)'
+    FUNCIONAL = 'Funcional'
+    TIPOS = [(TERRITORIAL, TERRITORIAL), (FUNCIONAL, FUNCIONAL)]
+    # Subfamilias de las organizaciones funcionales (grupos unidos por un interés común)
+    SUBCATEGORIAS = [
+        'Club de Adulto Mayor',
+        'Organización Deportiva',
+        'Centro de Madres, Cultural o Agrupación Juvenil',
+        'Comité de Vecinos, Allegados o Seguridad',
+    ]
+    VERIFICADO = 'Verificado'
+    PENDIENTE = 'Pendiente de revisión'
+    VERIFICACIONES = [(VERIFICADO, VERIFICADO), (PENDIENTE, PENDIENTE)]
+
+    codigo = models.CharField(max_length=20, unique=True)
+    nombre = models.CharField(max_length=150)
+    tipo = models.CharField(max_length=40, choices=TIPOS)
+    subcategoria = models.CharField(max_length=60, blank=True, choices=[(s, s) for s in SUBCATEGORIAS])
+    delegacion = models.ForeignKey(Delegacion, on_delete=models.PROTECT, related_name='organizaciones')
+    sector = models.CharField(max_length=120)
+    representante = models.CharField(max_length=150, blank=True)
+    telefono = models.CharField(max_length=30, blank=True)
+    verificacion = models.CharField(max_length=30, choices=VERIFICACIONES, default=PENDIENTE)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['codigo']
+        verbose_name = 'organización comunitaria'
+        verbose_name_plural = 'organizaciones comunitarias'
+
+    def __str__(self):
+        return f'{self.codigo} · {self.nombre}'

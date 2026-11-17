@@ -55,6 +55,10 @@
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       Búsqueda / filtro
     </a>
+    <a class="nav-item" href="{% url 'organizaciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M14.5 14.2c.8-.3 1.6-.4 2.5-.4 2.8 0 5 2.2 5 5"/></svg>
+      Organizaciones
+    </a>
     <div class="nav-group-label">Sistema</div>
     {% if sgr_puede_admin %}
     <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">

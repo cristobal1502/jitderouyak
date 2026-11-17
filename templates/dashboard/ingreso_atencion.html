@@ -55,6 +55,10 @@
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       Búsqueda / filtro
     </a>
+    <a class="nav-item" href="{% url 'organizaciones' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M14.5 14.2c.8-.3 1.6-.4 2.5-.4 2.8 0 5 2.2 5 5"/></svg>
+      Organizaciones
+    </a>
     <div class="nav-group-label">Sistema</div>
     {% if sgr_puede_admin %}
     <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">
@@ -83,12 +87,27 @@
       <form id="atencionForm" novalidate>
         <div class="field-group-2">
           <div class="field">
-            <label for="aSolicitante">Solicitante <span class="required">*</span></label>
-            <input type="text" id="aSolicitante" placeholder="Nombre o RUT de quien solicita" autocomplete="off">
+            <label for="aSolicitante">Nombre del vecino(a) <span class="required">*</span></label>
+            <input type="text" id="aSolicitante" placeholder="Nombre de quien solicita o recibe la atención" autocomplete="off">
           </div>
           <div class="field">
-            <label for="aFecha">Fecha de registro <span class="required">*</span></label>
+            <label for="aTelefono">Teléfono del vecino(a) <span class="required">*</span></label>
+            <input type="tel" id="aTelefono" placeholder="+56 9 1234 5678" autocomplete="off">
+            <span class="field-hint">Sin nombre y teléfono la actividad no suma puntaje: son obligatorios.</span>
+          </div>
+        </div>
+
+        <div class="field-group-2">
+          <div class="field">
+            <label for="aFecha">Fecha de la actividad <span class="required">*</span></label>
             <input type="date" id="aFecha">
+            <span class="field-hint" id="fechaAyuda">Lo de lunes a viernes se puede ingresar hasta el lunes siguiente.</span>
+          </div>
+          <div class="field">
+            <label class="check-inline" for="aEsDelegado">
+              <input type="checkbox" id="aEsDelegado">
+              El solicitante es el propio Delegado (se registra como «Otra gestión», no como atención ciudadana)
+            </label>
           </div>
         </div>
 
@@ -140,7 +159,7 @@
             <tr>
               <th style="width:80px;">Código</th>
               <th style="width:100px;">Fecha</th>
-              <th>Solicitante</th>
+              <th>Vecino(a)</th>
               <th>Tipo / Sub atención</th>
               <th>Descripción</th>
               <th>Delegación</th>

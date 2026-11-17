@@ -3,6 +3,9 @@ const BTN = 'var(--red-primary)';
 
 const form = document.getElementById('atencionForm'); // null si el rol no tiene permiso para registrar
 const fSolicitante = document.getElementById('aSolicitante');
+const fTelefono = document.getElementById('aTelefono');
+const fEsDelegado = document.getElementById('aEsDelegado');
+const fechaAyuda = document.getElementById('fechaAyuda');
 const fFecha = document.getElementById('aFecha');
 const fTipo = document.getElementById('aTipo');
 const fSub = document.getElementById('aSub');
@@ -17,7 +20,8 @@ const contador = document.getElementById('contador');
 const hoy = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD en hora local
 
 /* Catálogos y atenciones vienen de la base de datos (API) */
-let opcionesApi = { tipos: [], subatenciones: [], delegaciones: [], responsables: [] };
+let opcionesApi = { tipos: [], subatenciones: [], delegaciones: [], responsables: [], fechaMinima: '', maxPorDia: 7 };
+const telefonoValido = (t) => /^[0-9+()\s-]+$/.test(t) && t.replace(/\D/g, '').length >= 8 && t.replace(/\D/g, '').length <= 15;
 let atenciones = [];
 
 /* ---------- Selects que dependen del catálogo de Administración ---------- */
@@ -69,8 +73,24 @@ function marcar(el){ el.classList.add('field-invalid'); el.focus(); }
 function mostrarAlerta(caso, ctx = {}){
   switch(caso){
     case 'solicitante_vacio':
-      Swal.fire({ icon: 'error', title: 'Falta el solicitante', text: 'Ingresa el nombre o RUT de quien solicita la atención.', confirmButtonColor: BTN });
+      Swal.fire({ icon: 'error', title: 'Falta el nombre del vecino(a)', text: 'Sin el nombre del usuario la actividad no se puede guardar ni suma puntaje.', confirmButtonColor: BTN });
       marcar(fSolicitante); break;
+    case 'telefono_vacio':
+      Swal.fire({ icon: 'error', title: 'Falta el teléfono del vecino(a)', text: 'Sin el teléfono del usuario la actividad no se puede guardar ni suma puntaje.', confirmButtonColor: BTN });
+      marcar(fTelefono); break;
+    case 'telefono_invalido':
+      Swal.fire({ icon: 'error', title: 'Teléfono inválido', text: 'Ingresa un teléfono de 8 a 15 dígitos (puedes usar espacios y los signos + ( ) -).', confirmButtonColor: BTN });
+      marcar(fTelefono); break;
+    case 'semana_cerrada':
+      Swal.fire({ icon: 'warning', title: 'Semana cerrada',
+        text: `Las actividades de esa semana se podían ingresar hasta el lunes ${ctx.limite ? SGR.formatearFecha(ctx.limite) : 'siguiente'}. Ya no se aceptan ingresos para esa fecha.`,
+        confirmButtonColor: BTN });
+      marcar(fFecha); break;
+    case 'limite_diario':
+      Swal.fire({ icon: 'warning', title: 'Límite diario alcanzado',
+        text: `El funcionario responsable ya tiene ${ctx.max || opcionesApi.maxPorDia} actividades registradas ese día, que es el máximo permitido.`,
+        confirmButtonColor: BTN });
+      marcar(fFecha); break;
     case 'tipo_vacio':
       Swal.fire({ icon: 'error', title: 'Falta el tipo de atención', text: 'Selecciona el tipo de atención.', confirmButtonColor: BTN });
       marcar(fTipo); break;
@@ -98,7 +118,11 @@ function mostrarAlerta(caso, ctx = {}){
         confirmButtonColor: BTN });
       break;
     case 'guardado':
-      Swal.fire({ icon: 'success', title: 'Atención registrada', text: `Se generó el código ${ctx.codigo}.`, timer: 1600, showConfirmButton: false });
+      Swal.fire({ icon: 'success', title: 'Atención registrada',
+        text: ctx.otraGestion
+          ? `Se generó el código ${ctx.codigo}. Quedó como «Otra gestión» porque el solicitante es el Delegado.`
+          : `Se generó el código ${ctx.codigo}.`,
+        timer: ctx.otraGestion ? 3200 : 1600, showConfirmButton: false });
       break;
     default:
       Swal.fire({ icon: 'error', title: 'No se pudo registrar', text: 'Revisa los datos e inténtalo nuevamente.', confirmButtonColor: BTN });
@@ -107,7 +131,7 @@ function mostrarAlerta(caso, ctx = {}){
 
 /** Traduce un error de la API al popup que corresponde. */
 const CASO_CAMPO_VACIO = {
-  solicitante: 'solicitante_vacio', tipoId: 'tipo_vacio', subId: 'sub_vacia',
+  solicitante: 'solicitante_vacio', telefono: 'telefono_vacio', tipoId: 'tipo_vacio', subId: 'sub_vacia',
   delegacionId: 'delegacion_vacia', responsableId: 'responsable_vacio', fecha: 'fecha_vacia'
 };
 
@@ -119,6 +143,12 @@ function manejarError(err){
       return mostrarAlerta('descripcion_vacia');
     case 'fecha_futura':
       return mostrarAlerta('fecha_futura');
+    case 'telefono_invalido':
+      return mostrarAlerta('telefono_invalido');
+    case 'semana_cerrada':
+      return mostrarAlerta('semana_cerrada', { limite: err.detalle });
+    case 'limite_diario':
+      return mostrarAlerta('limite_diario', { max: err.detalle });
     case 'referencia_invalida':
     case 'sub_no_corresponde':
     case 'responsable_invalido':
@@ -135,7 +165,8 @@ function renderTabla(){
     <tr>
       <td class="code-cell">${esc(a.codigo)}</td>
       <td>${SGR.formatearFecha(a.fecha)}</td>
-      <td>${esc(a.solicitante)}</td>
+      <td>${esc(a.solicitante)}${a.telefono ? `<span class="due-note">${esc(a.telefono)}</span>` : ''}${
+        a.clasificacion === 'Otra gestión' ? '<br><span class="tag-otra-gestion">Otra gestión</span>' : ''}</td>
       <td>${esc(a.tipoNombre)}<span class="due-note">${esc(a.subNombre)}</span></td>
       <td>${esc(a.descripcion)}</td>
       <td>${esc(a.delegacionNombre)}</td>
@@ -166,6 +197,11 @@ async function recargarOpciones(){
   }
   cargarTipos();
   cargarDelegaciones();
+  if(opcionesApi.fechaMinima){
+    fFecha.min = opcionesApi.fechaMinima;
+    fechaAyuda.textContent = `Puedes ingresar actividades desde el ${SGR.formatearFecha(opcionesApi.fechaMinima)}. ` +
+      'Lo de lunes a viernes se acepta hasta el lunes siguiente.';
+  }
   limpiar();
 }
 
@@ -187,10 +223,13 @@ if(form){
     form.querySelectorAll('.field-invalid').forEach((el) => el.classList.remove('field-invalid'));
 
     const solicitante = fSolicitante.value.trim();
+    const telefono = fTelefono.value.trim();
     const descripcion = fDescripcion.value.trim();
 
     // Validación secuencial: se detiene en el primer caso que falle.
     if(solicitante === ''){ mostrarAlerta('solicitante_vacio'); return; }
+    if(telefono === ''){ mostrarAlerta('telefono_vacio'); return; }
+    if(!telefonoValido(telefono)){ mostrarAlerta('telefono_invalido'); return; }
     if(!fTipo.value){ mostrarAlerta('tipo_vacio'); return; }
     if(!fSub.value){ mostrarAlerta('sub_vacia'); return; }
     if(descripcion.length < 10){ mostrarAlerta('descripcion_vacia'); return; }
@@ -198,11 +237,14 @@ if(form){
     if(!fResponsable.value){ mostrarAlerta('responsable_vacio'); return; }
     if(!fFecha.value){ mostrarAlerta('fecha_vacia'); return; }
     if(fFecha.value > hoy()){ mostrarAlerta('fecha_futura'); return; }
+    if(opcionesApi.fechaMinima && fFecha.value < opcionesApi.fechaMinima){ mostrarAlerta('semana_cerrada'); return; }
 
     enviando = true;
     try {
       const registro = await SGR.post('atenciones/', {
         solicitante,
+        telefono,
+        solicitanteEsDelegado: fEsDelegado.checked,
         tipoId: Number(fTipo.value),
         subId: Number(fSub.value),
         descripcion,
@@ -212,7 +254,7 @@ if(form){
       });
       limpiar();
       await cargarAtenciones();
-      mostrarAlerta('guardado', { codigo: registro.codigo });
+      mostrarAlerta('guardado', { codigo: registro.codigo, otraGestion: registro.clasificacion === 'Otra gestión' });
     } catch(err) {
       manejarError(err);
     } finally {

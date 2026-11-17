@@ -11,6 +11,16 @@ const OPC_PERMISOS = [
   'Gestionar usuarios', 'Administrar catálogos', 'Exportar informes'
 ];
 const OPC_ALCANCE = ['Propio', 'Delegación', 'Todas las delegaciones'];
+// Deben coincidir con OrganizacionComunitaria (dashboard/models.py).
+const ORG_TERRITORIAL = 'Territorial (Junta de Vecinos)';
+const ORG_FUNCIONAL = 'Funcional';
+const OPC_SUBCATEGORIAS = [
+  'Club de Adulto Mayor',
+  'Organización Deportiva',
+  'Centro de Madres, Cultural o Agrupación Juvenil',
+  'Comité de Vecinos, Allegados o Seguridad'
+];
+const OPC_VERIFICACION = ['Pendiente de revisión', 'Verificado'];
 
 // 'api' es el nombre de la entidad en la API; 'refApi' apunta a la entidad referenciada.
 const ENTIDADES = {
@@ -93,11 +103,42 @@ const ENTIDADES = {
       { key: 'estado', label: 'Estado', tipo: 'estado' }
     ],
     columnas: ['codigo', 'nombre', 'tipoId', 'estado']
+  },
+
+  'organizaciones': {
+    titulo: 'Registro de organizaciones',
+    subtitulo: 'Juntas de vecinos y organizaciones funcionales, con su estado de verificación',
+    api: 'organizaciones', nuevoLabel: 'Nueva organización', singular: 'organización',
+    campos: [
+      { key: 'codigo', label: 'Código', tipo: 'texto', auto: true },
+      { key: 'nombre', label: 'Nombre', tipo: 'texto', requerido: true },
+      { key: 'tipo', label: 'Tipo de organización', tipo: 'opcion', opciones: [ORG_TERRITORIAL, ORG_FUNCIONAL], requerido: true },
+      { key: 'subcategoria', label: 'Subfamilia (funcionales)', tipo: 'opcion', opciones: OPC_SUBCATEGORIAS,
+        activoSi: { key: 'tipo', valor: ORG_FUNCIONAL } },
+      { key: 'delegacionId', label: 'Delegación', tipo: 'ref', refApi: 'delegaciones', requerido: true },
+      { key: 'sector', label: 'Sector', tipo: 'texto', requerido: true },
+      { key: 'representante', label: 'Representante / presidente(a)', tipo: 'texto' },
+      { key: 'telefono', label: 'Teléfono de contacto', tipo: 'texto' },
+      { key: 'verificacion', label: 'Verificación', tipo: 'verificacion', opciones: OPC_VERIFICACION },
+      { key: 'estado', label: 'Estado', tipo: 'estado' }
+    ],
+    columnas: ['codigo', 'nombre', 'tipo', 'subcategoria', 'delegacionId', 'sector', 'verificacion', 'estado'],
+    // Filtro rápido junto al buscador: [etiqueta, función que decide si la fila se muestra]
+    filtros: [
+      ['Todas las organizaciones', () => true],
+      ['Juntas de vecinos', (f) => f.tipo === ORG_TERRITORIAL],
+      ['Funcionales (todas)', (f) => f.tipo === ORG_FUNCIONAL],
+      ...OPC_SUBCATEGORIAS.map((sc) => [`· ${sc}`, (f) => f.subcategoria === sc]),
+      ['Pendientes de revisión', (f) => f.verificacion !== 'Verificado'],
+      ['Verificadas', (f) => f.verificacion === 'Verificado']
+    ]
   }
 };
 
 /* ---------- Estado de la página ---------- */
 const CFG = ENTIDADES[document.body.dataset.entidad];
+const SOLO_LECTURA = document.body.dataset.soloLectura === '1';
+const filtroExtra = document.getElementById('filtroExtra');
 const esc = SGR.esc;
 const BTN = 'var(--red-primary)';
 const correoRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -137,6 +178,10 @@ function mostrarAlerta(caso, ctx = {}){
     case 'sin_seleccion':
       return Swal.fire({ icon: 'error', title: 'Falta una selección',
         text: `Selecciona al menos una opción en «${etiqueta}».`, confirmButtonColor: BTN });
+
+    case 'telefono_invalido':
+      return Swal.fire({ icon: 'error', title: 'Teléfono inválido',
+        text: 'Usa solo números, espacios y los signos + ( ) -.', confirmButtonColor: BTN });
 
     case 'correo_invalido':
       return Swal.fire({ icon: 'error', title: 'Correo inválido',
@@ -214,6 +259,7 @@ function manejarError(err){
     case 'campo_vacio':
     case 'sin_seleccion':
     case 'correo_invalido':
+    case 'telefono_invalido':
     case 'duplicado':
     case 'referencia_invalida':
     case 'texto_largo':
@@ -258,6 +304,10 @@ function celdaHtml(campo, fila){
   if(campo.tipo === 'estado'){
     return `<span class="badge ${val === 'Activo' ? 'activo' : 'inactivo'}"><span class="dot"></span>${esc(val)}</span>`;
   }
+  if(campo.tipo === 'verificacion'){
+    return `<span class="badge ${val === 'Verificado' ? 'aprobada' : 'pendiente'}"><span class="dot"></span>${esc(val)}</span>`;
+  }
+  if(val === '') return '—';
   if(Array.isArray(val)){
     return val.length
       ? `<div class="chip-list">${val.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>`
@@ -277,17 +327,18 @@ function textoFila(fila){
 /* ---------- Tabla ---------- */
 function renderTabla(){
   const term = buscarInput.value.trim().toLowerCase();
-  const visibles = filas.filter((f) => !term || textoFila(f).toLowerCase().includes(term));
+  const filtro = CFG.filtros && filtroExtra ? CFG.filtros[Number(filtroExtra.value) || 0][1] : () => true;
+  const visibles = filas.filter((f) => filtro(f) && (!term || textoFila(f).toLowerCase().includes(term)));
   const extras = (CFG.accionesExtra || []);
 
   tablaBody.innerHTML = visibles.map((f) => `
     <tr>
       ${CFG.columnas.map((k) => `<td>${celdaHtml(campoDe(k), f)}</td>`).join('')}
-      <td class="row-actions">
+      ${SOLO_LECTURA ? '' : `<td class="row-actions">
         <button class="btn-table" data-accion="editar" data-id="${f.id}">Editar</button>
         ${extras.map((x) => `<button class="btn-table" data-accion="${x.accion}" data-id="${f.id}" title="${esc(x.ayuda || x.label)}">${esc(x.label)}</button>`).join('')}
         <button class="btn-table danger" data-accion="eliminar" data-id="${f.id}">Eliminar</button>
-      </td>
+      </td>`}
     </tr>`).join('');
 
   emptyState.style.display = visibles.length ? 'none' : 'block';
@@ -348,6 +399,10 @@ function campoHtml(c, valor, esNuevo){
       control = `<select id="${id}"><option value="">Selecciona…</option>${
         c.opciones.map((o) => `<option ${o === valor ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
       break;
+    case 'verificacion':
+      control = `<select id="${id}">${
+        c.opciones.map((o) => `<option ${o === (valor || c.opciones[0]) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      break;
     case 'ref':
       control = `<select id="${id}"><option value="">Selecciona…</option>${opcionesRef(c, valor)}</select>`;
       break;
@@ -379,11 +434,28 @@ function abrirModal(id){
   modalTitle.textContent = fila ? `Editar ${CFG.singular}` : CFG.nuevoLabel;
 
   crudForm.innerHTML = CFG.campos.map((c) => campoHtml(c, fila ? fila[c.key] : undefined, !fila)).join('');
+  actualizarDependientes();
 
   modalOverlay.classList.add('open');
   const primero = crudForm.querySelector('input[type="text"]:not(:disabled), input[type="email"], textarea, select');
   if(primero) primero.focus();
 }
+
+/* Campos que solo aplican según otro campo (p. ej. la subfamilia, solo para organizaciones funcionales). */
+function actualizarDependientes(){
+  CFG.campos.filter((c) => c.activoSi).forEach((c) => {
+    const control = document.getElementById(`f_${c.key}`);
+    const origen = document.getElementById(`f_${c.activoSi.key}`);
+    const activo = origen && origen.value === c.activoSi.valor;
+    control.disabled = !activo;
+    if(!activo) control.value = '';
+    const label = crudForm.querySelector(`label[for="f_${c.key}"]`);
+    if(label) label.innerHTML = esc(c.label) + (activo ? ' <span class="required">*</span>' : '');
+  });
+}
+crudForm.addEventListener('change', (e) => {
+  if(CFG.campos.some((c) => c.activoSi && `f_${c.activoSi.key}` === e.target.id)) actualizarDependientes();
+});
 
 function cerrarModal(){
   modalOverlay.classList.remove('open');
@@ -421,7 +493,8 @@ function validar(datos){
     const esLista = Array.isArray(v);
     const vacio = esLista ? v.length === 0 : (v === null || v === '');
 
-    if(c.requerido && vacio) return { caso: esLista ? 'sin_seleccion' : 'campo_vacio', campo: c };
+    const requerido = c.requerido || (c.activoSi && datos[c.activoSi.key] === c.activoSi.valor);
+    if(requerido && vacio) return { caso: esLista ? 'sin_seleccion' : 'campo_vacio', campo: c };
     if(c.tipo === 'correo' && v && !correoRe.test(v)) return { caso: 'correo_invalido', campo: c };
   }
   return null;
@@ -490,6 +563,11 @@ async function reiniciarPassword(id){
 }
 
 /* ---------- Eventos generales ---------- */
+if(CFG.filtros && filtroExtra){
+  filtroExtra.innerHTML = CFG.filtros.map(([etiqueta], i) => `<option value="${i}">${esc(etiqueta)}</option>`).join('');
+  filtroExtra.addEventListener('change', renderTabla);
+}
+
 nuevoBtn.addEventListener('click', () => abrirModal(null));
 closeModalBtn.addEventListener('click', cerrarModal);
 cancelModalBtn.addEventListener('click', cerrarModal);
@@ -503,5 +581,5 @@ crudSubtitulo.textContent = CFG.subtitulo;
 nuevoLabel.textContent = CFG.nuevoLabel;
 tablaHead.innerHTML = '<tr>' +
   CFG.columnas.map((k) => `<th>${esc(campoDe(k).label)}</th>`).join('') +
-  `<th style="width:${(CFG.accionesExtra || []).length ? 250 : 170}px;">Acciones</th></tr>`;
+  (SOLO_LECTURA ? '' : `<th style="width:${(CFG.accionesExtra || []).length ? 250 : 170}px;">Acciones</th>`) + '</tr>';
 cargarDatos();

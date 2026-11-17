@@ -9,7 +9,12 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
 - **Mi panel** — resumen de metas del período e historial de actividades.
 - **Agenda colectiva** — tubo de trabajo con filtros y seguimiento de compromisos.
 - **Casos sociales** — historial secuencial de atenciones por usuario (hasta 3 gestiones).
-- **Ingreso de atención** — solicitante, tipo, sub atención, descripción, delegación, responsable y fecha.
+- **Ingreso de atención** — vecino(a), teléfono, tipo, sub atención, descripción, delegación, responsable y fecha. Reglas de la Matriz SGR:
+  - Nombre y teléfono del vecino(a) son obligatorios (sin ellos no se guarda ni suma puntaje).
+  - Si el solicitante es el propio Delegado, se guarda como «Otra gestión» y no como atención ciudadana (se marca a mano o se detecta por el nombre).
+  - Máximo 7 actividades por funcionario en un mismo día.
+  - Cierre semanal: lo de una semana se puede ingresar hasta el lunes siguiente; desde el martes queda cerrada.
+- **Organizaciones** — registro de juntas de vecinos y organizaciones funcionales (subfamilias: Adulto Mayor, Deportivas, Centros de Madres/Culturales/Juveniles, Comités), con estado «Verificado / Pendiente de revisión». Todos lo consultan; lo editan quienes tienen «Administrar catálogos».
 - **Búsqueda avanzada** — filtros sobre las atenciones (delegación, período, funcionario, tipo, sub atención, fechas y palabras clave), paginación en el servidor y exportación a Excel (.xlsx) y PDF (vista imprimible). Respeta el alcance del rol; exportar requiere el permiso «Exportar informes».
 - **Administración (CRUD)** — Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención y Sub atenciones.
 - **Configuraciones** — perfil, cambio de contraseña y preferencias de notificación.
@@ -22,7 +27,7 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
 - **Tipografía:** Public Sans e IBM Plex Mono (Google Fonts)
 
 > **Qué usa base de datos y qué sigue siendo maqueta**
-> - Con base de datos: Login y sesión, recuperación de contraseña, Administración (Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención, Sub atenciones), Ingreso de atención, Búsqueda avanzada y Configuraciones.
+> - Con base de datos: Login y sesión, recuperación de contraseña, Administración (Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención, Sub atenciones), Ingreso de atención, Búsqueda avanzada, Organizaciones y Configuraciones.
 > - Aún maqueta (contenido fijo en el HTML/JS): Mi panel, Agenda colectiva y Casos sociales.
 
 ## Cómo ejecutarlo

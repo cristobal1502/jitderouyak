@@ -12,7 +12,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from dashboard.models import (
-    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
+    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, OrganizacionComunitaria, Perfil, Rol,
+    SubAtencion, TipoAtencion,
 )
 
 ROLES = [
@@ -93,6 +94,25 @@ CASOS_DEMO = [
 ]
 
 
+# (código, nombre, tipo, subfamilia, delegación, sector, representante, teléfono, verificación)
+_T, _F = OrganizacionComunitaria.TERRITORIAL, OrganizacionComunitaria.FUNCIONAL
+_SUB = OrganizacionComunitaria.SUBCATEGORIAS
+ORGANIZACIONES_DEMO = [
+    ('ORG-001', 'Junta de Vecinos Villa El Faro', _T, '', 'DEL-001', 'Coquimbo Centro', 'Rosa Álvarez',
+     '+56 9 5555 1111', OrganizacionComunitaria.VERIFICADO),
+    ('ORG-002', 'Junta de Vecinos Las Compañías Norte', _T, '', 'DEL-002', 'Las Compañías', '', '',
+     OrganizacionComunitaria.PENDIENTE),
+    ('ORG-003', 'Club de Adulto Mayor Renacer', _F, _SUB[0], 'DEL-001', 'Coquimbo Oriente', 'Luis Cortés',
+     '+56 9 5555 2222', OrganizacionComunitaria.PENDIENTE),
+    ('ORG-004', 'Club Deportivo Tierras Blancas', _F, _SUB[1], 'DEL-003', 'Tierras Blancas', 'Pablo Rivera',
+     '+56 9 5555 3333', OrganizacionComunitaria.VERIFICADO),
+    ('ORG-005', 'Centro de Madres Esperanza', _F, _SUB[2], 'DEL-002', 'Las Compañías', 'Gloria Pizarro', '',
+     OrganizacionComunitaria.PENDIENTE),
+    ('ORG-006', 'Comité de Seguridad Pasaje Los Aromos', _F, _SUB[3], 'DEL-003', 'Tierras Blancas', '', '',
+     OrganizacionComunitaria.PENDIENTE),
+]
+
+
 class Command(BaseCommand):
     help = 'Carga roles, catálogos y un usuario administrador (y datos de ejemplo con --demo).'
 
@@ -163,14 +183,14 @@ class Command(BaseCommand):
             juan = User.objects.get(username='juan.perez')
             carla = User.objects.get(username='carla.tapia')
             demo = [
-                ('AT-001', 'María Morales Carrasco', 'TAT-001', 'SUB-001', 'Entrevista en delegación y ficha FIBE.',
+                ('AT-001', 'María Morales Carrasco', '+56 9 8765 4321', 'TAT-001', 'SUB-001', 'Entrevista en delegación y ficha FIBE.',
                  'DEL-003', carla, date(2026, 10, 5)),
-                ('AT-002', 'Carlos Araya Godoy', 'TAT-002', 'SUB-003', 'Verificación de techumbre tras lluvias.',
+                ('AT-002', 'Carlos Araya Godoy', '+56 9 1122 3344', 'TAT-002', 'SUB-003', 'Verificación de techumbre tras lluvias.',
                  'DEL-001', juan, date(2026, 10, 8)),
             ]
-            for codigo, sol, tipo, sub, desc, deleg, resp, fecha in demo:
+            for codigo, sol, tel, tipo, sub, desc, deleg, resp, fecha in demo:
                 Atencion.objects.get_or_create(codigo=codigo, defaults={
-                    'solicitante': sol, 'tipo': tipos[tipo], 'subatencion': subs[sub], 'descripcion': desc,
+                    'solicitante': sol, 'telefono': tel, 'tipo': tipos[tipo], 'subatencion': subs[sub], 'descripcion': desc,
                     'delegacion': dels[deleg], 'responsable': resp, 'fecha': fecha, 'creado_por': admin_user})
             for codigo, nombre, rut, tel, sector, deleg, creador, gestiones in CASOS_DEMO:
                 caso, nuevo = CasoSocial.objects.get_or_create(codigo=codigo, defaults={
@@ -180,6 +200,10 @@ class Command(BaseCommand):
                     for numero, (tipo, detalle, fecha, atiende) in enumerate(gestiones, start=1):
                         GestionSocial.objects.create(caso=caso, numero=numero, tipo=tipos[tipo], detalle=detalle,
                                                      fecha=fecha, atendido_por=User.objects.get(username=atiende))
+            for codigo, nombre, tipo, sub, deleg, sector, rep, tel, verif in ORGANIZACIONES_DEMO:
+                OrganizacionComunitaria.objects.get_or_create(codigo=codigo, defaults={
+                    'nombre': nombre, 'tipo': tipo, 'subcategoria': sub, 'delegacion': dels[deleg],
+                    'sector': sector, 'representante': rep, 'telefono': tel, 'verificacion': verif})
             self.stdout.write(self.style.SUCCESS('Datos de ejemplo cargados (contraseña de los usuarios demo: Demo1234!).'))
 
         self.stdout.write(self.style.SUCCESS('Listo: roles, catálogos y administrador.'))

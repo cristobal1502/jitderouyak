@@ -18,7 +18,8 @@ y el front los traduce a un popup de SweetAlert2 (un case por situación).
 """
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
+import unicodedata
 from functools import wraps
 
 from django.contrib.auth import update_session_auth_hash
@@ -33,7 +34,8 @@ from login.utils import enviar_correo_seguro, generar_password_temporal, validar
 
 from . import permisos as P
 from .models import (
-    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
+    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, OrganizacionComunitaria, Perfil, Rol,
+    SubAtencion, TipoAtencion,
 )
 
 CORREO_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
@@ -201,6 +203,8 @@ class DelegacionesRecurso(ConCodigo):
             usos.append(f'{o.atenciones.count()} atención(es)')
         if o.casos.exists():
             usos.append(f'{o.casos.count()} caso(s) social(es)')
+        if o.organizaciones.exists():
+            usos.append(f'{o.organizaciones.count()} organización(es) comunitaria(s)')
         return usos
 
 
@@ -408,9 +412,78 @@ class UsuariosRecurso(Recurso):
         perfil.user.delete()  # elimina también el Perfil (CASCADE)
 
 
+class OrganizacionesRecurso(ConCodigo):
+    slug = 'organizaciones'
+    modelo = OrganizacionComunitaria
+    permiso_escritura = P.PERM_CATALOGOS
+    prefijo = 'ORG'
+
+    def consulta(self):
+        return OrganizacionComunitaria.objects.select_related('delegacion')
+
+    def serializar(self, o):
+        return {'id': o.pk, 'codigo': o.codigo, 'nombre': o.nombre, 'tipo': o.tipo,
+                'subcategoria': o.subcategoria, 'delegacionId': o.delegacion_id, 'sector': o.sector,
+                'representante': o.representante, 'telefono': o.telefono,
+                'verificacion': o.verificacion, 'estado': estado_txt(o.activo)}
+
+    def validar(self, datos, instancia, request):
+        tipo = datos.get('tipo')
+        if not tipo:
+            raise ErrorApi('campo_vacio', 'tipo')
+        if tipo not in dict(OrganizacionComunitaria.TIPOS):
+            raise ErrorApi('referencia_invalida', 'tipo')
+
+        subcategoria = (datos.get('subcategoria') or '').strip()
+        if tipo == OrganizacionComunitaria.FUNCIONAL:
+            if not subcategoria:
+                raise ErrorApi('campo_vacio', 'subcategoria')
+            if subcategoria not in OrganizacionComunitaria.SUBCATEGORIAS:
+                raise ErrorApi('referencia_invalida', 'subcategoria')
+        else:
+            subcategoria = ''  # las juntas de vecinos (territoriales) no tienen subfamilia
+
+        delegacion = leer_id(datos, 'delegacionId', Delegacion)
+        if not P.delegaciones_de(request.user).filter(pk=delegacion.pk).exists():
+            raise ErrorApi('prohibido', 'delegacionId', status=403)
+
+        telefono = (datos.get('telefono') or '').strip()
+        if telefono and not TELEFONO_RE.fullmatch(telefono):
+            raise ErrorApi('telefono_invalido', 'telefono')
+
+        verificacion = datos.get('verificacion') or OrganizacionComunitaria.PENDIENTE
+        if verificacion not in dict(OrganizacionComunitaria.VERIFICACIONES):
+            raise ErrorApi('referencia_invalida', 'verificacion')
+
+        representante = (datos.get('representante') or '').strip()
+        if len(representante) > 150:
+            raise ErrorApi('texto_largo', 'representante', '150')
+
+        return {
+            'codigo': self.codigo_validado(datos, instancia),
+            'nombre': leer_texto(datos, 'nombre', 150),
+            'tipo': tipo,
+            'subcategoria': subcategoria,
+            'delegacion': delegacion,
+            'sector': leer_texto(datos, 'sector', 120),
+            'representante': representante,
+            'telefono': telefono,
+            'verificacion': verificacion,
+            'activo': leer_estado(datos),
+        }
+
+    def puede_eliminar(self, obj, request):
+        if not P.delegaciones_de(request.user).filter(pk=obj.delegacion_id).exists():
+            raise ErrorApi('prohibido', status=403)
+
+    def actualizar(self, obj, valores, request):
+        self.puede_eliminar(obj, request)  # solo organizaciones de sus delegaciones
+        return super().actualizar(obj, valores, request)
+
+
 RECURSOS = {r.slug: r for r in (
     DelegacionesRecurso(), RolesRecurso(), UsuariosRecurso(),
-    ItemsRecurso(), TiposRecurso(), SubAtencionesRecurso(),
+    ItemsRecurso(), TiposRecurso(), SubAtencionesRecurso(), OrganizacionesRecurso(),
 )}
 
 
@@ -538,7 +611,8 @@ def reiniciar_password(request, pk):
 # ------------------------------------------------------------------ atenciones
 def serializar_atencion(a):
     return {
-        'id': a.pk, 'codigo': a.codigo, 'solicitante': a.solicitante,
+        'id': a.pk, 'codigo': a.codigo, 'solicitante': a.solicitante, 'telefono': a.telefono,
+        'clasificacion': a.clasificacion,
         'tipoId': a.tipo_id, 'tipoNombre': a.tipo.nombre,
         'subId': a.subatencion_id, 'subNombre': a.subatencion.nombre,
         'descripcion': a.descripcion,
@@ -584,11 +658,52 @@ def opciones_atencion(request):
                           for s in SubAtencion.objects.filter(activo=True)],
         'delegaciones': [{'id': d.pk, 'nombre': d.nombre} for d in delegaciones],
         'responsables': responsables,
+        'fechaMinima': primera_fecha_abierta().isoformat(),
+        'maxPorDia': Atencion.MAX_POR_DIA,
     })
+
+
+def limite_ingreso(fecha):
+    """Último día en que se puede ingresar una actividad de esa fecha: el lunes siguiente
+    a su semana. Desde el martes la semana anterior queda cerrada."""
+    return fecha - timedelta(days=fecha.weekday()) + timedelta(days=7)
+
+
+def primera_fecha_abierta(hoy=None):
+    """Fecha más antigua que todavía se puede ingresar hoy."""
+    hoy = hoy or timezone.localdate()
+    lunes = hoy - timedelta(days=hoy.weekday())
+    return lunes - timedelta(days=7) if hoy.weekday() == 0 else lunes
+
+
+def leer_telefono(datos, key='telefono'):
+    telefono = datos.get(key)
+    telefono = telefono.strip() if isinstance(telefono, str) else ''
+    if not telefono:
+        raise ErrorApi('campo_vacio', key)
+    digitos = re.sub(r'\D', '', telefono)
+    if not TELEFONO_RE.fullmatch(telefono) or not 8 <= len(digitos) <= 15:
+        raise ErrorApi('telefono_invalido', key)
+    return telefono
+
+
+def _normalizar_nombre(texto):
+    sin_tildes = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode()
+    return ' '.join(sin_tildes.lower().split())
+
+
+def solicitante_es_delegado(solicitante, delegacion):
+    """True si el solicitante coincide con el nombre de un Delegado de esa delegación."""
+    buscado = _normalizar_nombre(solicitante)
+    for perfil in delegacion.perfiles.select_related('user', 'rol'):
+        if P.es_delegado(perfil.user) and _normalizar_nombre(P.nombre_visible(perfil.user)) == buscado:
+            return True
+    return False
 
 
 def _validar_atencion(datos, user):
     solicitante = leer_texto(datos, 'solicitante', 150)
+    telefono = leer_telefono(datos)
 
     tipo = leer_id(datos, 'tipoId', TipoAtencion)
     if not tipo.activo:
@@ -622,11 +737,21 @@ def _validar_atencion(datos, user):
         fecha = date.fromisoformat(str(fecha_txt))
     except ValueError:
         raise ErrorApi('fecha_invalida', 'fecha')
-    if fecha > timezone.localdate():
+    hoy = timezone.localdate()
+    if fecha > hoy:
         raise ErrorApi('fecha_futura', 'fecha')
+    if hoy > limite_ingreso(fecha):
+        raise ErrorApi('semana_cerrada', 'fecha', limite_ingreso(fecha).isoformat())
 
-    return {'solicitante': solicitante, 'tipo': tipo, 'subatencion': sub, 'descripcion': descripcion,
-            'delegacion': delegacion, 'responsable': responsable, 'fecha': fecha}
+    if Atencion.objects.filter(responsable=responsable, fecha=fecha).count() >= Atencion.MAX_POR_DIA:
+        raise ErrorApi('limite_diario', 'fecha', str(Atencion.MAX_POR_DIA))
+
+    es_delegado = datos.get('solicitanteEsDelegado') is True or solicitante_es_delegado(solicitante, delegacion)
+    clasificacion = Atencion.OTRA_GESTION if es_delegado else Atencion.CIUDADANA
+
+    return {'solicitante': solicitante, 'telefono': telefono, 'tipo': tipo, 'subatencion': sub,
+            'descripcion': descripcion, 'delegacion': delegacion, 'responsable': responsable,
+            'fecha': fecha, 'clasificacion': clasificacion}
 
 
 @api_login_requerido
@@ -680,7 +805,7 @@ def _leer_fecha(params, key):
 
 def filtrar_busqueda(user, params):
     """Atenciones visibles para el usuario que cumplen los filtros de la query string.
-    Parámetros (todos opcionales): delegacion, funcionario, tipo, sub (ids), desde, hasta
+    Parámetros (todos opcionales): delegacion, funcionario, tipo, sub (ids), clasificacion, desde, hasta
     (AAAA-MM-DD) y q (palabras clave en código, solicitante, descripción, tipo y sub atención)."""
     qs = atenciones_visibles(user)
 
@@ -717,11 +842,18 @@ def filtrar_busqueda(user, params):
     if hasta:
         qs = qs.filter(fecha__lte=hasta)
 
+    clasificacion = (params.get('clasificacion') or '').strip()
+    if clasificacion:
+        if clasificacion not in dict(Atencion.CLASIFICACIONES):
+            raise ErrorApi('referencia_invalida', 'clasificacion')
+        qs = qs.filter(clasificacion=clasificacion)
+
     q = (params.get('q') or '').strip()
     if len(q) > 100:
         raise ErrorApi('texto_largo', 'q', '100')
     for palabra in q.split():
         qs = qs.filter(Q(codigo__icontains=palabra) | Q(solicitante__icontains=palabra)
+                       | Q(telefono__icontains=palabra)
                        | Q(descripcion__icontains=palabra) | Q(tipo__nombre__icontains=palabra)
                        | Q(subatencion__nombre__icontains=palabra))
 
@@ -766,18 +898,19 @@ def opciones_busqueda(request):
         'subatenciones': [{'id': s.pk, 'nombre': s.nombre, 'tipoId': s.tipo_id}
                           for s in SubAtencion.objects.order_by('nombre')],
         'anios': sorted(set(fechas) | {timezone.localdate().year}, reverse=True),
+        'clasificaciones': [c for c, _ in Atencion.CLASIFICACIONES],
         'puedeExportar': P.tiene_permiso(user, P.PERM_EXPORTAR),
     })
 
 
 COLUMNAS_EXPORTAR = ['Código', 'Fecha', 'Funcionario', 'Delegación', 'Tipo de atención',
-                     'Sub atención', 'Solicitante', 'Descripción']
+                     'Sub atención', 'Solicitante', 'Teléfono', 'Clasificación', 'Descripción']
 
 
 def filas_exportar(qs):
     for a in qs[:BUSQUEDA_MAX_EXPORTAR]:
         yield [a.codigo, a.fecha, P.nombre_visible(a.responsable), a.delegacion.nombre,
-               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.descripcion]
+               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.telefono, a.clasificacion, a.descripcion]
 
 
 @api_login_requerido
@@ -801,7 +934,7 @@ def exportar_busqueda(request):
         ws.append(fila)
     for celda in ws['B'][1:]:
         celda.number_format = 'DD/MM/YYYY'
-    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 60], start=1):
+    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 16, 20, 60], start=1):
         ws.column_dimensions[get_column_letter(i)].width = ancho
     ws.freeze_panes = 'A2'
     ws.auto_filter.ref = ws.dimensions
