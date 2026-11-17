@@ -1,14 +1,14 @@
 # SGR Municipal
 
-Sistema de gestión territorial para delegaciones municipales (Django + MySQL). Permite a un gestor territorial registrar actividades, dar seguimiento a compromisos colectivos, gestionar casos sociales con historial de gestiones, y realizar búsquedas avanzadas con reportabilidad.
+Sistema de gestión territorial para delegaciones municipales (Django + MySQL). Permite a un gestor territorial registrar actividades con el puntaje de la Matriz SGR, dar seguimiento a compromisos colectivos, llevar el registro de organizaciones comunitarias y realizar búsquedas avanzadas con reportabilidad.
 
 ## Vistas incluidas
 
 - **Login** — ingreso con usuario o correo y contraseña; el acceso y el menú dependen del rol.
+- **Menú lateral contraíble** — un botón en la barra superior lo reduce a solo íconos (el nombre aparece al pasar el mouse); la preferencia se recuerda en el navegador.
 - **Recuperar contraseña** — solicitud de código por correo → **Validar código** (vigencia de 5 min, reenvío cada 30 s y 3 intentos, controlados por el servidor) → **Crear nueva contraseña** → retorno al login.
 - **Mi panel** — resumen de metas del período e historial de actividades.
 - **Agenda colectiva** — tubo de trabajo con filtros y seguimiento de compromisos.
-- **Casos sociales** — historial secuencial de atenciones por usuario (hasta 3 gestiones).
 - **Ingreso de atención** — vecino(a), teléfono, tipo, sub atención, descripción, delegación, responsable y fecha. Reglas de la Matriz SGR:
   - Nombre y teléfono del vecino(a) son obligatorios (sin ellos no se guarda ni suma puntaje).
   - Si el solicitante es el propio Delegado, se guarda como «Otra gestión» y no como atención ciudadana (se marca a mano o se detecta por el nombre).
@@ -29,7 +29,7 @@ Los 7 cargos de una delegación vienen creados como roles (se crean solos al cor
 | Cargo | Funciones | Permisos principales | Alcance |
 |---|---|---|---|
 | Delegado | Representante del alcalde en el territorio; dirige al equipo. Único que registra ausencias y felicitaciones. | Registrar, validar, agenda, organizaciones, exportar | Delegación |
-| Gestor Social (Trabajador Social) | Casos sociales, visitas a domicilio y derivaciones. | Registrar | Propio |
+| Gestor Social (Trabajador Social) | Atención de personas vulnerables, visitas a domicilio y derivaciones. | Registrar | Propio |
 | Apoyo Administrativo | Atención en oficina, agenda del delegado, registro en la planilla SGR. | Registrar, agenda | Delegación |
 | Organizaciones Comunitarias | Crea, legaliza y capacita a JJVV y agrupaciones; mantiene su registro. | Registrar, organizaciones | Delegación |
 | Gestor de Compras y Proyectos | Compras de materiales y contratación de servicios. | Registrar | Propio |
@@ -47,7 +47,8 @@ El permiso nuevo «Gestionar organizaciones» permite editar el registro de orga
 
 > **Qué usa base de datos y qué sigue siendo maqueta**
 > - Con base de datos: Login y sesión, recuperación de contraseña, Administración (Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención, Sub atenciones), Ingreso de atención, Búsqueda avanzada, Organizaciones y Configuraciones.
-> - Aún maqueta (contenido fijo en el HTML/JS): Mi panel, Agenda colectiva y Casos sociales.
+> - Aún maqueta (contenido fijo en el HTML/JS): Agenda colectiva.
+> - Casos sociales se retiró de la aplicación (pantalla y API). Sus tablas `dashboard_casosocial` y `dashboard_gestionsocial` se conservan en la base para no perder datos.
 
 ## Cómo ejecutarlo
 
@@ -161,14 +162,15 @@ login/                          (app)
 ├── models.py                   CodigoRecuperacion
 ├── views.py · urls.py · utils.py · tests.py
 templates/
-├── dashboard/  dashboard, agenda, casos_sociales, ingreso_atencion, busqueda,
-│               crud (una plantilla para los 6 mantenedores), configuraciones
+├── dashboard/  dashboard, agenda, ingreso_atencion, busqueda, busqueda_imprimir, matriz,
+│               crud (mantenedores y organizaciones), configuraciones
 └── login/      login, forgot_password, validar_codigo, reset_password
 static/
 ├── css/        styles.css (dashboard y administración), login.css
 └── js/         api.js (cliente fetch), crud.js (motor de los 6 CRUD), ingreso_atencion.js,
                 configuraciones.js, login.js, forgot_password.js, validar_codigo.js,
-                reset_password.js, script.js, agenda.js, casos-sociales.js, busqueda.js
+                reset_password.js, script.js, agenda.js, busqueda.js, matriz.js,
+                sidebar.js (menú contraíble)
 ```
 
 > La base de datos vive en MySQL (se consulta en phpMyAdmin). Tablas principales: `dashboard_delegacion`, `dashboard_rol`, `dashboard_perfil`, `dashboard_itemmeta`, `dashboard_tipoatencion`, `dashboard_subatencion`, `dashboard_atencion`, `auth_user`, `login_codigorecuperacion`.
@@ -178,10 +180,9 @@ static/
 **Dashboards por perfil** (`/dashboard/`, datos reales de la BD según permisos y alcance del rol):
 - *Administrador* (permiso "Gestionar usuarios"): usuarios, delegaciones, todos los mantenedores, distribución por rol/delegación/tipo.
 - *Supervisor* (permisos intermedios): indicadores de sus delegaciones, mantenedores autorizados, equipo.
-- *Administrativo* (solo registra): sus propias atenciones y casos; administración restringida (403).
+- *Administrativo* (solo registra): sus propias atenciones, puntos del mes y actividades en preparación; administración restringida (403).
 
-**Transacciones**: (1) Registro de atenciones (`/api/atenciones/`) y (2) Casos sociales (`/api/casos/`, `/api/casos/<id>/gestiones/`):
-caso + gestión 1 se crean en un `transaction.atomic()`; máximo 3 gestiones, RUT validado (módulo 11) y fechas no retroactivas.
+**Transacciones**: (1) Registro de atenciones (`/api/atenciones/`): código correlativo y puntaje se calculan y guardan dentro de un `transaction.atomic()`, con reintento si dos personas toman el mismo código. (2) Marcar una actividad como ejecutada (`/api/atenciones/<id>/ejecutar/`): bloquea la fila con `select_for_update()` mientras recalcula el puntaje y el tope de 120%.
 
 **Usuarios demo** (clave `Demo1234!`): laura.mena (Supervisor), diego.vera (Administrativo), juan.perez / carla.tapia (Funcionario). Admin: `admin` / `Admin123!`.
 

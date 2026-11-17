@@ -13,7 +13,7 @@ from django.db import transaction
 
 from dashboard.cargos import ROLES_CARGO
 from dashboard.models import (
-    Atencion, Ausencia, CasoSocial, Delegacion, Felicitacion, GestionSocial, ItemMeta,
+    Atencion, Ausencia, Delegacion, Felicitacion, ItemMeta,
     OrganizacionComunitaria, Perfil, Rol, SubAtencion, TipoAtencion,
 )
 
@@ -36,7 +36,7 @@ ROLES = [
     ('Supervisor', 'Supervisa la operación de sus delegaciones: valida evidencias, gestiona agenda y catálogos.',
      ['Ver panel', 'Registrar actividades', 'Validar evidencias', 'Gestionar agenda',
       'Administrar catálogos', 'Exportar informes'], 'Delegación'),
-    ('Administrativo', 'Registra atenciones y casos propios. Sin acceso a administración.',
+    ('Administrativo', 'Registra sus propias atenciones. Sin acceso a administración.',
      ['Ver panel', 'Registrar actividades'], 'Propio'),
 ]
 
@@ -81,19 +81,6 @@ USUARIOS_DEMO = [
     ('laura.mena', 'Laura Mena', 'laura.mena@municipalidad.cl', 'Supervisor', ['DEL-001', 'DEL-002'], True),
     ('diego.vera', 'Diego Vera', 'diego.vera@municipalidad.cl', 'Administrativo', ['DEL-001'], True),
 ]
-
-# (código, nombre, RUT, teléfono, sector, delegación, creado por, [(tipo, detalle, fecha, atendido por)])
-CASOS_DEMO = [
-    ('CS-001', 'María Morales Carrasco', '12.345.678-5', '+56 9 8765 4321', 'Tierras Blancas', 'DEL-003', 'carla.tapia', [
-        ('TAT-001', 'Entrevista en delegación y diagnóstico socioeconómico preliminar.', date(2026, 8, 2), 'carla.tapia'),
-        ('TAT-002', 'Visita en domicilio para verificar condiciones de techumbre tras precipitaciones.', date(2026, 8, 20), 'carla.tapia'),
-    ]),
-    ('CS-002', 'Carlos Araya Godoy', '9.876.543-3', '+56 9 1122 3344', 'Coquimbo Oriente', 'DEL-001', 'juan.perez', [
-        ('TAT-001', 'Entrevista inicial y levantamiento de antecedentes.', date(2026, 7, 28), 'juan.perez'),
-        ('TAT-004', 'Derivación a red de apoyo comunal para seguimiento.', date(2026, 8, 15), 'juan.perez'),
-    ]),
-]
-
 
 # (código, nombre, tipo, subfamilia, delegación, sector, representante, teléfono, verificación)
 _T, _F = OrganizacionComunitaria.TERRITORIAL, OrganizacionComunitaria.FUNCIONAL
@@ -195,14 +182,6 @@ class Command(BaseCommand):
                     'ejecutada_el': fecha, 'puntaje': 1,
                     'solicitante': sol, 'telefono': tel, 'tipo': tipos[tipo], 'subatencion': subs[sub], 'descripcion': desc,
                     'delegacion': dels[deleg], 'responsable': resp, 'fecha': fecha, 'creado_por': admin_user})
-            for codigo, nombre, rut, tel, sector, deleg, creador, gestiones in CASOS_DEMO:
-                caso, nuevo = CasoSocial.objects.get_or_create(codigo=codigo, defaults={
-                    'nombre': nombre, 'rut': rut, 'telefono': tel, 'sector': sector,
-                    'delegacion': dels[deleg], 'creado_por': User.objects.get(username=creador)})
-                if nuevo:
-                    for numero, (tipo, detalle, fecha, atiende) in enumerate(gestiones, start=1):
-                        GestionSocial.objects.create(caso=caso, numero=numero, tipo=tipos[tipo], detalle=detalle,
-                                                     fecha=fecha, atendido_por=User.objects.get(username=atiende))
             for codigo, nombre, tipo, sub, deleg, sector, rep, tel, verif in ORGANIZACIONES_DEMO:
                 OrganizacionComunitaria.objects.get_or_create(codigo=codigo, defaults={
                     'nombre': nombre, 'tipo': tipo, 'subcategoria': sub, 'delegacion': dels[deleg],

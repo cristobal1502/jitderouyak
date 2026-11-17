@@ -6,7 +6,6 @@ urlpatterns = [
     # Pantallas
     path('', views.dashboard, name='dashboard'),
     path('agenda/', views.agenda, name='agenda'),
-    path('casos_sociales/', views.casos_sociales, name='casos_sociales'),
     path('busqueda/', views.busqueda, name='busqueda'),
     path('busqueda/imprimir/', views.busqueda_imprimir, name='busqueda_imprimir'),
     path('organizaciones/', views.organizaciones, name='organizaciones'),
@@ -29,8 +28,6 @@ urlpatterns = [
     path('api/busqueda/', api.busqueda, name='api_busqueda'),
     path('api/busqueda/opciones/', api.opciones_busqueda, name='api_busqueda_opciones'),
     path('api/busqueda/exportar/', api.exportar_busqueda, name='api_busqueda_exportar'),
-    path('api/casos/', api.casos, name='api_casos'),
-    path('api/casos/<int:pk>/gestiones/', api.gestiones_caso, name='api_gestiones_caso'),
     path('api/usuarios/<int:pk>/reiniciar-password/', api.reiniciar_password, name='api_reiniciar_password'),
     path('api/<slug:entidad>/', api.lista, name='api_lista'),
     path('api/<slug:entidad>/<int:pk>/', api.detalle, name='api_detalle'),

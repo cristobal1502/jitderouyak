@@ -700,153 +700,6 @@ button{font-family:inherit;}
   box-shadow:0 0 0 3px var(--red-soft);
 }
 
-/* ---------- Casos (atenciones sociales) ---------- */
-.casos-list{
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-}
-.caso-card{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:6px;
-  overflow:hidden;
-}
-.caso-header{
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:6px 18px;
-  padding:16px 20px;
-  cursor:pointer;
-}
-.caso-header:hover{background:var(--stripe);}
-.caso-id{
-  font-family:var(--font-mono);
-  font-weight:700;
-  font-size:13.5px;
-  color:var(--red-primary);
-}
-.caso-nombre{font-weight:700; font-size:14px;}
-.caso-meta-item{
-  font-size:12.5px;
-  color:var(--ink-soft);
-}
-.caso-meta-item b{color:var(--ink); font-weight:600;}
-.caso-toggle-icon{
-  margin-left:auto;
-  color:var(--ink-faint);
-  display:flex;
-  transition:transform .18s ease;
-  flex:none;
-}
-.caso-card.expanded .caso-toggle-icon{transform:rotate(180deg);}
-
-.caso-body{
-  border-top:1px solid var(--border);
-  padding:18px 20px 20px;
-  display:none;
-}
-.caso-card.expanded .caso-body{display:block;}
-.caso-body-label{
-  font-size:11.5px;
-  font-weight:600;
-  color:var(--ink-faint);
-  letter-spacing:0.02em;
-  margin-bottom:14px;
-}
-
-.gestion-timeline{
-  display:flex;
-  flex-direction:column;
-}
-.gestion-step{
-  display:flex;
-  gap:14px;
-}
-.step-marker-col{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  flex:none;
-}
-.step-marker{
-  width:26px;height:26px;
-  border-radius:50%;
-  background:var(--red-primary);
-  color:#fff;
-  font-size:12px;
-  font-weight:700;
-  font-family:var(--font-mono);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  flex:none;
-}
-.step-marker.pending{
-  background:var(--surface);
-  border:1.5px dashed var(--border-strong);
-  color:var(--ink-faint);
-}
-.step-connector{
-  width:2px;
-  flex:1;
-  background:var(--border);
-  margin:4px 0;
-  min-height:22px;
-}
-.gestion-step:last-child .step-connector{display:none;}
-.step-content{
-  flex:1;
-  padding-bottom:20px;
-}
-.step-title-row{
-  display:flex;
-  align-items:baseline;
-  gap:8px;
-  flex-wrap:wrap;
-  margin-bottom:4px;
-}
-.step-title{font-weight:700; font-size:13.5px;}
-.step-date{
-  font-family:var(--font-mono);
-  font-size:11.5px;
-  color:var(--ink-faint);
-}
-.step-date.pendiente{color:var(--red-primary); font-weight:600;}
-.step-detail{
-  font-size:13px;
-  color:var(--ink-soft);
-  line-height:1.5;
-  margin-bottom:6px;
-}
-.step-atendido{
-  font-size:12px;
-  color:var(--ink-faint);
-}
-.btn-register-gestion{
-  background:var(--red-soft);
-  color:var(--red-primary);
-  border:1px dashed var(--red-primary);
-  padding:7px 13px;
-  border-radius:var(--radius);
-  font-size:12.5px;
-  font-weight:600;
-  cursor:pointer;
-  margin-top:6px;
-}
-.btn-register-gestion:hover{background:var(--red-soft-strong);}
-
-.caso-collapsed-hint{
-  padding:14px 20px 18px;
-  font-size:13px;
-  color:var(--red-primary);
-  font-weight:600;
-  cursor:pointer;
-  border-top:1px solid var(--border);
-}
-.caso-collapsed-hint:hover{text-decoration:underline;}
-
 /* ---------- Filters panel (búsqueda avanzada) ---------- */
 .filters-panel{
   background:var(--surface);
@@ -1515,3 +1368,56 @@ button{font-family:inherit;}
 .lista-simple .linea3{color:var(--ink-faint); font-size:11.5px; margin-top:3px; font-family:var(--font-mono);}
 .lista-simple .vacio{color:var(--ink-faint);}
 .nota-equilibrio{font-size:12.5px; color:var(--ink-soft); margin-top:6px;}
+
+/* ---------- Menú lateral contraíble (solo íconos) ---------- */
+.sidebar-toggle{
+  width:34px;height:34px;
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius);
+  background:var(--surface);
+  color:var(--ink-soft);
+  cursor:pointer;
+  margin-right:-6px;
+  transition:background .15s ease, color .15s ease;
+}
+.sidebar-toggle:hover{background:var(--stripe); color:var(--ink);}
+.sidebar-toggle:focus-visible{outline:none; border-color:var(--red-primary); box-shadow:0 0 0 3px var(--red-soft);}
+.sidebar-toggle .icono-abrir{display:none;}
+html.sidebar-collapsed .sidebar-toggle .icono-abrir{display:block;}
+html.sidebar-collapsed .sidebar-toggle .icono-cerrar{display:none;}
+
+.sidebar{transition:width .2s ease, padding .2s ease;}
+html.sidebar-collapsed .sidebar{width:68px; padding:18px 10px;}
+html.sidebar-collapsed .nav-item{
+  justify-content:center;
+  gap:0;
+  padding:10px 0;
+  font-size:0;          /* oculta el texto; el ícono SVG tiene tamaño propio */
+  border-left-width:2px;
+}
+html.sidebar-collapsed .nav-tag{display:none;}
+html.sidebar-collapsed .sidebar .nav-group-label{
+  font-size:0;
+  padding:0;
+  height:1px;
+  margin:10px 8px;
+  background:var(--sidebar-bg-alt);
+}
+html.sidebar-collapsed .sidebar .nav-group-label:first-child{display:none;}
+html.sidebar-collapsed .sidebar-foot{display:none;}
+
+@media (max-width: 880px){
+  /* en pantallas chicas el menú ya es una franja horizontal: contraído muestra solo los íconos en fila */
+  html.sidebar-collapsed .sidebar{width:100%; padding:8px 12px;}
+  html.sidebar-collapsed .nav-item{padding:9px 12px;}
+  html.sidebar-collapsed .sidebar .nav-group-label{display:none;}
+  .sidebar-toggle{margin-right:0;}
+  .topbar .divider-v{display:none;}
+}
+@media (prefers-reduced-motion: reduce){
+  .sidebar{transition:none;}
+}

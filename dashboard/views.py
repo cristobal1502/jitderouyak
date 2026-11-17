@@ -2,16 +2,16 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.http import Http404
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 
 from . import permisos as P
-from .api import BUSQUEDA_MAX_EXPORTAR, ErrorApi, atenciones_visibles, casos_visibles, filtrar_busqueda
+from .api import BUSQUEDA_MAX_EXPORTAR, ErrorApi, atenciones_visibles, filtrar_busqueda
 from .models import (
-    CasoSocial, Delegacion, GestionSocial, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
+    Atencion, Delegacion, ItemMeta, OrganizacionComunitaria, Perfil, Rol, SubAtencion, TipoAtencion,
 )
 
 # Slugs válidos de los mantenedores (deben coincidir con crud.js y con las pestañas)
@@ -63,14 +63,13 @@ def contexto_dashboard(user):
     """Cifras reales del panel según el alcance del rol (mismas reglas que la API)."""
     tipo = P.tipo_dashboard(user)
     atenciones = atenciones_visibles(user)
-    casos = CasoSocial.objects.filter(pk__in=casos_visibles(user).values('pk'))
     hoy = timezone.localdate()
     inicio_mes = hoy.replace(day=1)
 
     total_aten = atenciones.count()
-    total_casos = casos.count()
-    casos_completos = casos.annotate(n=Count('gestiones')).filter(n__gte=CasoSocial.MAX_GESTIONES).count()
-    gestiones = GestionSocial.objects.filter(caso__in=casos)
+    organizaciones = OrganizacionComunitaria.objects.filter(activo=True)
+    if P.alcance_de(user) != P.ALCANCE_TODAS:
+        organizaciones = organizaciones.filter(delegacion__in=P.delegaciones_de(user))
 
     titulo, subtitulo = PERFILES_TXT[tipo]
     ctx = {
@@ -81,12 +80,11 @@ def contexto_dashboard(user):
         'total_atenciones': total_aten,
         'atenciones_mes': atenciones.filter(fecha__gte=inicio_mes).count(),
         'atenciones_semana': atenciones.filter(fecha__gte=hoy - timedelta(days=6)).count(),
-        'total_casos': total_casos,
-        'casos_seguimiento': total_casos - casos_completos,
-        'casos_completos': casos_completos,
-        'total_gestiones': gestiones.count(),
+        'puntos_mes': atenciones.filter(ejecutada_el__gte=inicio_mes).aggregate(t=Sum('puntaje'))['t'] or 0,
+        'en_preparacion': atenciones.filter(estado=Atencion.PREPARACION).count(),
+        'total_organizaciones': organizaciones.count(),
+        'organizaciones_pendientes': organizaciones.exclude(verificacion=OrganizacionComunitaria.VERIFICADO).count(),
         'ultimas_atenciones': list(atenciones[:6]),
-        'ultimos_casos': list(casos.select_related('delegacion').annotate(n=Count('gestiones'))[:5]),
         'por_tipo': _barras(atenciones, 'tipo__nombre', total_aten),
         'puede_registrar': P.tiene_permiso(user, P.PERM_REGISTRAR),
         'mes_actual': hoy.strftime('%m/%Y'),
@@ -124,11 +122,6 @@ def dashboard(request):
 @login_required
 def agenda(request):
     return render(request, 'dashboard/agenda.html')
-
-
-@login_required
-def casos_sociales(request):
-    return render(request, 'dashboard/casos_sociales.html')
 
 
 @login_required
