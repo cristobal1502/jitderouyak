@@ -12,6 +12,8 @@ Reglas:
     sobrante es como máximo un 20% de la meta.
   - Cuando un ítem llega al 120% de su meta (contando el sobrante recibido), deja de sumar: la
     actividad se guarda con 0 puntos y se avisa al usuario para que se enfoque en los ítems más bajos.
+  - Reclamos: cada reclamo que registra el Delegado descuenta sus puntos (1 a 5) del ítem indicado,
+    en el trimestre de su fecha. El resultado de un ítem nunca baja de 0.
 """
 import calendar
 import math
@@ -19,7 +21,7 @@ from datetime import date, timedelta
 
 from django.db.models import Sum
 
-from .models import Atencion, Ausencia, ItemMeta
+from .models import Atencion, Ausencia, ItemMeta, Reclamo
 
 TOPE = 1.2                  # 120% de cumplimiento
 VERDE, AMARILLO = 1.0, 0.7  # semáforo: ≥100% verde, ≥70% amarillo, bajo eso rojo
@@ -97,6 +99,13 @@ def puntos(user, item, anio, q):
             .aggregate(t=Sum('puntaje'))['t'] or 0)
 
 
+def descuentos(user, item, anio, q):
+    """Puntos descontados por reclamos en el trimestre, en ese ítem."""
+    desde, hasta = rango_trimestre(anio, q)
+    return (Reclamo.objects.filter(funcionario=user, item=item, fecha__range=(desde, hasta))
+            .aggregate(t=Sum('puntos'))['t'] or 0)
+
+
 def arrastre(user, item, anio, q):
     """Sobrante que llega al trimestre (anio, q) desde el trimestre anterior, en ese ítem.
     Se calcula en cadena: lo recibido en un trimestre también cuenta para su propio sobrante."""
@@ -116,6 +125,10 @@ def arrastre(user, item, anio, q):
         por_trimestre[clave] = por_trimestre.get(clave, 0) + pts
     if not por_trimestre:
         return 0.0
+    for dia, pts in Reclamo.objects.filter(funcionario=user, item=item,
+                                           fecha__range=(desde, hasta)).values_list('fecha', 'puntos'):
+        clave = trimestre_de(dia)
+        por_trimestre[clave] = por_trimestre.get(clave, 0) - pts
     ausencias = list(Ausencia.objects.filter(funcionario=user, desde__lte=hasta, hasta__gte=desde))
     sobrante = 0.0
     for a, t in cadena:
@@ -123,7 +136,7 @@ def arrastre(user, item, anio, q):
         if not pts and not sobrante:
             continue
         meta = meta_ajustada(item, factor_disponibilidad(user, a, t, ausencias))
-        sobrante = max(0.0, pts + sobrante - meta)
+        sobrante = max(0.0, max(0.0, pts + sobrante) - meta)
     return round(sobrante, 1)
 
 
@@ -158,7 +171,9 @@ def asignar_puntaje(atencion):
         return None
     anio, q = trimestre_de(atencion.ejecutada_el)
     meta = meta_ajustada(atencion.item, factor_disponibilidad(atencion.responsable, anio, q))
-    actuales = puntos(atencion.responsable, atencion.item, anio, q) + arrastre(atencion.responsable, atencion.item, anio, q)
+    actuales = max(0, puntos(atencion.responsable, atencion.item, anio, q)
+                   + arrastre(atencion.responsable, atencion.item, anio, q)
+                   - descuentos(atencion.responsable, atencion.item, anio, q))
     if actuales >= tope_puntos(meta):
         atencion.tope_alcanzado = True
         return {
@@ -179,15 +194,18 @@ def resumen_funcionario(user, anio, q, items=None, ausencias=None):
     desde, hasta = rango_trimestre(anio, q)
     por_item = dict(Atencion.objects.filter(responsable=user, ejecutada_el__range=(desde, hasta))
                     .order_by().values('item').annotate(t=Sum('puntaje')).values_list('item', 't'))
+    por_reclamo = dict(Reclamo.objects.filter(funcionario=user, fecha__range=(desde, hasta))
+                       .order_by().values('item').annotate(t=Sum('puntos')).values_list('item', 't'))
     filas = []
     for item in items:
         meta = meta_ajustada(item, factor)
         pts = por_item.get(item.pk) or 0
         extra = arrastre(user, item, anio, q)
-        total = pts + extra
+        menos = por_reclamo.get(item.pk) or 0
+        total = max(0.0, pts + extra - menos)
         valor = cumplimiento(total, meta)
         filas.append({'itemId': item.pk, 'item': item.nombre, 'puntos': pts, 'arrastre': extra,
-                      'total': round(total, 1), 'meta': meta,
+                      'descuento': menos, 'total': round(total, 1), 'meta': meta,
                       'sobrante': round(max(0.0, total - meta), 1),
                       'cumplimiento': round(valor * 100), 'semaforo': semaforo(valor),
                       'enTope': total >= tope_puntos(meta)})

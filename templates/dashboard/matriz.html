@@ -118,6 +118,7 @@
       <div class="spacer"></div>
       <div class="acciones">
         <button type="button" class="btn-secondary" id="ausenciaBtn" hidden>Registrar ausencia</button>
+        <button type="button" class="btn-secondary" id="reclamoBtn" hidden>Registrar reclamo</button>
         <button type="button" class="btn-primary" id="felicitacionBtn" hidden>Registrar felicitación</button>
       </div>
     </div>
@@ -151,7 +152,7 @@
       <p class="empty-state" id="equipoVacio" style="display:none;">La delegación no tiene funcionarios activos.</p>
     </div>
 
-    <div class="dos-columnas">
+    <div class="tres-columnas">
       <div class="section">
         <div class="section-head"><h2>Ausencias del trimestre</h2><span class="meta">Vacaciones, licencias y días libres</span></div>
         <ul class="lista-simple" id="listaAusencias"></ul>
@@ -159,6 +160,10 @@
       <div class="section">
         <div class="section-head"><h2>Felicitaciones del trimestre</h2><span class="meta">Solo con respaldo formal</span></div>
         <ul class="lista-simple" id="listaFelicitaciones"></ul>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>Reclamos del trimestre</h2><span class="meta">Descuentan puntos del ítem</span></div>
+        <ul class="lista-simple" id="listaReclamos"></ul>
       </div>
     </div>
   </main>

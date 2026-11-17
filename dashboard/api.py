@@ -33,7 +33,7 @@ from login.utils import enviar_correo_seguro, generar_password_temporal, validar
 from . import matriz as M
 from . import permisos as P
 from .models import (
-    Atencion, Ausencia, Delegacion, Felicitacion, ItemMeta,
+    Atencion, Ausencia, Delegacion, Felicitacion, ItemMeta, Reclamo,
     OrganizacionComunitaria, Perfil, Rol, SubAtencion, TipoAtencion,
 )
 
@@ -1397,6 +1397,14 @@ def serializar_ausencia(a):
             'observacion': a.observacion}
 
 
+def serializar_reclamo(r):
+    return {'id': r.pk, 'funcionarioId': r.funcionario_id, 'funcionario': P.nombre_visible(r.funcionario),
+            'delegacionId': r.delegacion_id, 'itemId': r.item_id, 'item': r.item.nombre,
+            'fecha': r.fecha.isoformat(), 'reclamante': r.reclamante, 'motivo': r.motivo,
+            'respaldoTipo': r.respaldo_tipo, 'respaldoReferencia': r.respaldo_referencia, 'puntos': r.puntos,
+            'registradoPor': P.nombre_visible(r.registrado_por) if r.registrado_por else ''}
+
+
 def serializar_felicitacion(f):
     return {'id': f.pk, 'funcionarioId': f.funcionario_id, 'funcionario': P.nombre_visible(f.funcionario),
             'delegacionId': f.delegacion_id, 'fecha': f.fecha.isoformat(), 'emisor': f.emisor,
@@ -1426,21 +1434,27 @@ def matriz_equipo(request):
                      .select_related('funcionario'))
     felicitaciones = list(Felicitacion.objects.filter(delegacion=delegacion, fecha__range=(desde, hasta))
                           .select_related('funcionario', 'registrada_por'))
+    reclamos = list(Reclamo.objects.filter(delegacion=delegacion, fecha__range=(desde, hasta))
+                    .select_related('funcionario', 'registrado_por', 'item'))
 
     equipo = []
-    por_item = {i.pk: {'itemId': i.pk, 'item': i.nombre, 'puntos': 0, 'arrastre': 0.0, 'total': 0.0, 'meta': 0.0}
+    por_item = {i.pk: {'itemId': i.pk, 'item': i.nombre, 'puntos': 0, 'arrastre': 0.0, 'descuento': 0,
+                       'total': 0.0, 'meta': 0.0}
                 for i in items}
     for u in miembros:
         propias = [a for a in ausencias if a.funcionario_id == u.pk]
         factor, filas = M.resumen_funcionario(u, anio, q, items, propias)
         pts = sum(f['puntos'] for f in filas)
         extra = sum(f['arrastre'] for f in filas)
+        menos = sum(f['descuento'] for f in filas)
+        total = sum(f['total'] for f in filas)
         meta = sum(f['meta'] for f in filas)
-        valor = M.cumplimiento(pts + extra, meta) if filas else 0
+        valor = M.cumplimiento(total, meta) if filas else 0
         for f in filas:
             fila = por_item[f['itemId']]
             fila['puntos'] += f['puntos']
             fila['arrastre'] += f['arrastre']
+            fila['descuento'] += f['descuento']
             fila['total'] += f['total']
             fila['meta'] += f['meta']
         equipo.append({
@@ -1448,10 +1462,11 @@ def matriz_equipo(request):
             'disponibilidad': round(factor * 100),
             'diasAusente': M.dias_ausente(u, desde, hasta, propias),
             'ausenteHoy': any(a.desde <= hoy <= a.hasta for a in propias),
-            'puntos': pts, 'arrastre': round(extra, 1), 'total': round(pts + extra, 1),
+            'puntos': pts, 'arrastre': round(extra, 1), 'descuento': menos, 'total': round(total, 1),
             'meta': round(meta, 1), 'cumplimiento': round(valor * 100),
             'semaforo': M.semaforo(valor), 'items': filas,
             'felicitaciones': sum(1 for f in felicitaciones if f.funcionario_id == u.pk),
+            'reclamos': sum(1 for r in reclamos if r.funcionario_id == u.pk),
         })
 
     items_equipo = []
@@ -1463,8 +1478,10 @@ def matriz_equipo(request):
 
     total_pts = sum(f['puntos'] for f in items_equipo)
     total_arrastre = sum(f['arrastre'] for f in items_equipo)
+    total_descuento = sum(f['descuento'] for f in items_equipo)
+    total_efectivo = sum(f['total'] for f in items_equipo)
     total_meta = sum(f['meta'] for f in items_equipo)
-    avance = M.cumplimiento(total_pts + total_arrastre, total_meta) if items_equipo else 0
+    avance = M.cumplimiento(total_efectivo, total_meta) if items_equipo else 0
     pcts = [m['cumplimiento'] for m in equipo]
     brecha = (max(pcts) - min(pcts)) if pcts else 0
     return JsonResponse({
@@ -1476,8 +1493,8 @@ def matriz_equipo(request):
         'desde': desde.isoformat(), 'hasta': hasta.isoformat(),
         'trimestres': trimestres_disponibles(),
         'grupo': {
-            'puntos': total_pts, 'arrastre': round(total_arrastre, 1),
-            'total': round(total_pts + total_arrastre, 1),
+            'puntos': total_pts, 'arrastre': round(total_arrastre, 1), 'descuento': total_descuento,
+            'total': round(total_efectivo, 1),
             'meta': round(total_meta, 1), 'cumplimiento': round(avance * 100),
             'semaforo': M.semaforo(avance), 'brecha': brecha,
             'equilibrado': bool(pcts) and brecha <= 30 and min(pcts) >= M.AMARILLO * 100,
@@ -1487,6 +1504,9 @@ def matriz_equipo(request):
         'equipo': equipo,
         'ausencias': [serializar_ausencia(a) for a in ausencias],
         'felicitaciones': [serializar_felicitacion(f) for f in felicitaciones],
+        'reclamos': [serializar_reclamo(r) for r in reclamos],
+        'itemsCatalogo': [{'id': i.pk, 'nombre': i.nombre} for i in items],
+        'maxDescuento': Reclamo.MAX_DESCUENTO,
         'puedeGestionar': puede_gestionar_equipo(user),
         'tiposAusencia': Ausencia.TIPOS,
         'tiposRespaldo': Felicitacion.RESPALDOS,
@@ -1553,6 +1573,21 @@ def ausencia_detalle(request, pk):
     return JsonResponse({'ok': True})
 
 
+def leer_respaldo(datos):
+    """Respaldo formal (carta, correo formal, oficio o libro) con su referencia; nada de chats."""
+    respaldo_tipo = datos.get('respaldoTipo')
+    if not respaldo_tipo:
+        raise ErrorApi('campo_vacio', 'respaldoTipo')
+    if respaldo_tipo not in Felicitacion.RESPALDOS:
+        raise ErrorApi('respaldo_informal', 'respaldoTipo')
+    referencia = leer_texto(datos, 'respaldoReferencia', 120)
+    if len(referencia) < 4:
+        raise ErrorApi('campo_vacio', 'respaldoReferencia')
+    if RESPALDO_INFORMAL_RE.search(referencia):
+        raise ErrorApi('respaldo_informal', 'respaldoReferencia')
+    return respaldo_tipo, referencia
+
+
 RESPALDO_INFORMAL_RE = re.compile(r'whats|wsp|wasap|telegram|chat|instagram|facebook|messenger|sms', re.I)
 
 
@@ -1569,17 +1604,57 @@ def felicitaciones(request):
         raise ErrorApi('fecha_futura', 'fecha')
     emisor = leer_texto(datos, 'emisor', 150)
     motivo = leer_texto(datos, 'motivo')
-    respaldo_tipo = datos.get('respaldoTipo')
-    if not respaldo_tipo:
-        raise ErrorApi('campo_vacio', 'respaldoTipo')
-    if respaldo_tipo not in Felicitacion.RESPALDOS:
-        raise ErrorApi('respaldo_informal', 'respaldoTipo')
-    referencia = leer_texto(datos, 'respaldoReferencia', 120)
-    if len(referencia) < 4:
-        raise ErrorApi('campo_vacio', 'respaldoReferencia')
-    if RESPALDO_INFORMAL_RE.search(referencia):
-        raise ErrorApi('respaldo_informal', 'respaldoReferencia')
+    respaldo_tipo, referencia = leer_respaldo(datos)
     f = Felicitacion.objects.create(funcionario=funcionario, delegacion=delegacion, fecha=fecha, emisor=emisor,
                                     motivo=motivo, respaldo_tipo=respaldo_tipo, respaldo_referencia=referencia,
                                     registrada_por=request.user)
     return JsonResponse(serializar_felicitacion(f), status=201)
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['POST'])
+def reclamos(request):
+    """Registra un reclamo contra un funcionario del equipo. Solo el Delegado, con respaldo formal.
+    Descuenta 'puntos' (1 a 5) del ítem indicado en el trimestre de la fecha del reclamo."""
+    datos = leer_json(request)
+    delegacion = _delegacion_de_equipo(request.user, leer_id(datos, 'delegacionId', Delegacion).pk,
+                                       exigir_delegado=True)
+    funcionario = _miembro(datos, delegacion)
+    item = leer_id(datos, 'itemId', ItemMeta)
+    if not item.activo:
+        raise ErrorApi('referencia_invalida', 'itemId')
+    fecha = _leer_fecha_campo(datos, 'fecha')
+    if fecha > timezone.localdate():
+        raise ErrorApi('fecha_futura', 'fecha')
+    reclamante = leer_texto(datos, 'reclamante', 150)
+    motivo = leer_texto(datos, 'motivo')
+    if len(motivo) < 10:
+        raise ErrorApi('texto_corto', 'motivo', '10')
+    valor = datos.get('puntos')
+    try:
+        puntos = 1 if valor in (None, '') else int(valor)
+    except (TypeError, ValueError):
+        raise ErrorApi('numero_invalido', 'puntos')
+    if not 1 <= puntos <= Reclamo.MAX_DESCUENTO:
+        raise ErrorApi('numero_invalido', 'puntos')
+    respaldo_tipo, referencia = leer_respaldo(datos)
+    r = Reclamo.objects.create(funcionario=funcionario, delegacion=delegacion, item=item, fecha=fecha,
+                               reclamante=reclamante, motivo=motivo, respaldo_tipo=respaldo_tipo,
+                               respaldo_referencia=referencia, puntos=puntos, registrado_por=request.user)
+    return JsonResponse(serializar_reclamo(Reclamo.objects.select_related('funcionario', 'item', 'registrado_por')
+                                           .get(pk=r.pk)), status=201)
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['DELETE'])
+def reclamo_detalle(request, pk):
+    """Elimina un reclamo mal ingresado (devuelve los puntos descontados). Solo el Delegado."""
+    if not puede_gestionar_equipo(request.user):
+        raise ErrorApi('solo_delegado', status=403)
+    r = Reclamo.objects.filter(pk=pk, delegacion__in=P.delegaciones_de(request.user)).first()
+    if r is None:
+        raise ErrorApi('no_encontrado', status=404)
+    r.delete()
+    return JsonResponse({'ok': True})

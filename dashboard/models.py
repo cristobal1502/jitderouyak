@@ -296,3 +296,30 @@ class Felicitacion(models.Model):
 
     def __str__(self):
         return f'{self.funcionario} · {self.fecha}'
+
+
+class Reclamo(models.Model):
+    """Reclamo de un vecino contra un funcionario. Solo lo ingresa el Delegado, con respaldo formal,
+    y descuenta puntos del ítem indicado en el trimestre de su fecha."""
+    MAX_DESCUENTO = 5
+
+    funcionario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reclamos')
+    delegacion = models.ForeignKey(Delegacion, on_delete=models.PROTECT, related_name='reclamos')
+    item = models.ForeignKey(ItemMeta, on_delete=models.PROTECT, related_name='reclamos')
+    fecha = models.DateField()
+    reclamante = models.CharField(max_length=150)       # quién reclama (vecino, junta de vecinos, institución)
+    motivo = models.TextField()
+    respaldo_tipo = models.CharField(max_length=40)     # mismos tipos de respaldo formal que las felicitaciones
+    respaldo_referencia = models.CharField(max_length=120)
+    puntos = models.PositiveSmallIntegerField(default=1)  # puntos que descuenta (1 a 5)
+    registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       related_name='reclamos_registrados')
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha', '-id']
+        constraints = [models.CheckConstraint(condition=models.Q(puntos__gte=1, puntos__lte=5),
+                                              name='reclamo_descuento_entre_1_y_5')]
+
+    def __str__(self):
+        return f'{self.funcionario} · {self.fecha} · −{self.puntos}'

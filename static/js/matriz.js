@@ -12,6 +12,7 @@
   const fTrimestre = $('mTrimestre');
   const ausenciaBtn = $('ausenciaBtn');
   const felicitacionBtn = $('felicitacionBtn');
+  const reclamoBtn = $('reclamoBtn');
 
   let datos = null;
 
@@ -47,13 +48,15 @@
     fTrimestre.innerHTML = datos.trimestres.map((t) =>
       `<option value="${t.valor}">${esc(t.nombre)} (${SGR.formatearFecha(t.desde).slice(0, 5)} – ${SGR.formatearFecha(t.hasta).slice(0, 5)})</option>`).join('');
     fTrimestre.value = datos.trimestre;
-    ausenciaBtn.hidden = felicitacionBtn.hidden = !datos.puedeGestionar;
+    ausenciaBtn.hidden = felicitacionBtn.hidden = reclamoBtn.hidden = !datos.puedeGestionar;
 
     const g = datos.grupo;
     $('kAvance').innerHTML = sem(g.semaforo, `${g.cumplimiento}%`);
     $('kPuntos').textContent = `${g.total} / ${g.meta}`;
-    $('kArrastre').textContent = g.arrastre
-      ? `incluye ${g.arrastre} de sobrante del ${datos.trimestreAnterior}` : '';
+    $('kArrastre').textContent = [
+      g.arrastre ? `incluye ${g.arrastre} de sobrante del ${datos.trimestreAnterior}` : '',
+      g.descuento ? `${g.descuento} descontado${g.descuento === 1 ? '' : 's'} por reclamos` : ''
+    ].filter(Boolean).join(' · ');
     $('kSemaforo').innerHTML = ['verde', 'amarillo', 'rojo']
       .map((c) => `${sem(c, String(g.conteo[c]))}`).join(' ');
     $('kEquilibrio').innerHTML = datos.equipo.length
@@ -64,7 +67,7 @@
     $('itemsEquipo').innerHTML = datos.items.length ? datos.items.map((i) => `
       <div class="goal-row">
         <div class="goal-top"><span class="goal-name">${esc(i.item)}</span>
-          <span class="goal-figures"><b>${i.total}</b> / ${i.meta} pts${i.arrastre ? ` <span class="arrastre">(${i.puntos} + ${i.arrastre} sobrante)</span>` : ''} · ${sem(i.semaforo, i.cumplimiento + '%')}</span></div>
+          <span class="goal-figures"><b>${i.total}</b> / ${i.meta} pts${i.arrastre ? ` <span class="arrastre">(+${i.arrastre} sobrante)</span>` : ''}${i.descuento ? ` <span class="descuento">(−${i.descuento} reclamos)</span>` : ''} · ${sem(i.semaforo, i.cumplimiento + '%')}</span></div>
         <div class="meta-track"><div class="meta-fill ${i.semaforo}" style="width:${ancho(i.cumplimiento)}%"></div></div>
         <div class="meta-escala"><span>0%</span><span>100%</span><span>${datos.tope}%</span></div>
       </div>`).join('') : '<div class="empty-state">No hay ítems activos. Créalos en Administración → Ítems y metas.</div>';
@@ -77,9 +80,10 @@
       <tr>
         <td class="funcionario">${esc(m.nombre)}<small>${esc(m.cargo)}</small>
           ${m.ausenteHoy ? '<span class="chip-ausente">Ausente hoy</span>' : ''}
-          ${m.felicitaciones ? `<span class="chip">★ ${m.felicitaciones} felicitación${m.felicitaciones === 1 ? '' : 'es'}</span>` : ''}</td>
+          ${m.felicitaciones ? `<span class="chip">★ ${m.felicitaciones} felicitación${m.felicitaciones === 1 ? '' : 'es'}</span>` : ''}
+          ${m.reclamos ? `<span class="chip chip-reclamo">${m.reclamos} reclamo${m.reclamos === 1 ? '' : 's'}</span>` : ''}</td>
         ${m.items.map((c) => `<td class="celda-item">${sem(c.semaforo, c.cumplimiento + '%')}
-          <small>${c.total} / ${c.meta}${c.arrastre ? ` · +${c.arrastre} sobr.` : ''}${c.enTope ? ' · tope' : ''}</small></td>`).join('')}
+          <small>${c.total} / ${c.meta}${c.arrastre ? ` · +${c.arrastre} sobr.` : ''}${c.descuento ? ` · −${c.descuento} recl.` : ''}${c.enTope ? ' · tope' : ''}</small></td>`).join('')}
         <td class="celda-item">${sem(m.semaforo, m.cumplimiento + '%')}<small>${m.total} / ${m.meta}</small></td>
         <td class="celda-item">${m.disponibilidad}%<small>${m.diasAusente} día${m.diasAusente === 1 ? '' : 's'} ausente</small></td>
       </tr>`).join('');
@@ -100,6 +104,15 @@
         <div class="linea2">${esc(f.motivo)} — <i>${esc(f.emisor)}</i></div>
         <div class="linea3">Respaldo: ${esc(f.respaldoTipo)} · ${esc(f.respaldoReferencia)}</div>
       </li>`).join('') : '<li class="vacio">Sin felicitaciones registradas en el trimestre.</li>';
+
+    // Reclamos
+    $('listaReclamos').innerHTML = datos.reclamos.length ? datos.reclamos.map((r) => `
+      <li>
+        <div class="linea1"><span>${esc(r.funcionario)}</span><span class="descuento">−${r.puntos} pto${r.puntos === 1 ? '' : 's'} · ${esc(r.item)}</span></div>
+        <div class="linea2">${esc(r.motivo)} — <i>${esc(r.reclamante)}</i></div>
+        <div class="linea3">${SGR.formatearFecha(r.fecha)} · Respaldo: ${esc(r.respaldoTipo)} · ${esc(r.respaldoReferencia)}</div>
+        ${datos.puedeGestionar ? `<button type="button" class="btn-table danger" data-borrar-reclamo="${r.id}" style="margin-top:8px;">Eliminar</button>` : ''}
+      </li>`).join('') : '<li class="vacio">Sin reclamos registrados en el trimestre.</li>';
   }
 
   fDelegacion.addEventListener('change', cargar);
@@ -115,7 +128,9 @@
     respaldo_informal: ['Respaldo no válido', 'La felicitación necesita un respaldo formal (carta, correo formal, oficio o libro). Los mensajes por WhatsApp, chat o redes sociales no valen.'],
     solo_delegado: ['Solo el Delegado', 'Únicamente el Delegado puede registrar ausencias y felicitaciones.'],
     referencia_invalida: ['Dato no válido', 'Revisa el funcionario y las opciones elegidas.'],
-    texto_largo: ['Texto demasiado largo', 'Acorta el texto ingresado.']
+    texto_largo: ['Texto demasiado largo', 'Acorta el texto ingresado.'],
+    texto_corto: ['Motivo muy corto', 'Describe el motivo del reclamo (al menos 10 caracteres).'],
+    numero_invalido: ['Descuento no válido', 'Los puntos a descontar deben ser un número entre 1 y 5.']
   };
   function errorFormulario(err){
     if(err.error === 'prohibido' || err.error === 'no_autenticado' || err.error === 'sin_conexion'){
@@ -201,6 +216,51 @@
       await SGR.post('felicitaciones/', res.value);
       await cargar();
       Swal.fire({ icon: 'success', title: 'Felicitación registrada', timer: 1500, showConfirmButton: false });
+    } catch(err) { errorFormulario(err); }
+  });
+
+  /* ---------- Reclamos (solo Delegado, con respaldo formal; descuentan puntos) ---------- */
+  reclamoBtn.addEventListener('click', async () => {
+    const res = await Swal.fire({
+      title: 'Registrar reclamo', width: 640, customClass: { popup: 'swal-form' },
+      html: '<div class="field-group-2">' +
+        campo('Funcionario reclamado *', `<select id="sFun">${opcionesEquipo()}</select>`) +
+        campo('Fecha *', `<input type="date" id="sFecha" value="${hoy()}" max="${hoy()}">`) + '</div>' +
+        campo('Quién reclama *', '<input type="text" id="sReclamante" maxlength="150" placeholder="Vecino(a), junta de vecinos, institución…" data-validar="nombre" data-requerido>') +
+        campo('Motivo *', '<textarea id="sMotivo" rows="2" placeholder="Qué ocurrió" data-validar="texto:10" data-requerido></textarea>') +
+        '<div class="field-group-2">' +
+        campo('Ítem al que descuenta *', `<select id="sItem">${datos.itemsCatalogo.map((i) => `<option value="${i.id}">${esc(i.nombre)}</option>`).join('')}</select>`) +
+        campo('Puntos a descontar *', `<input type="number" id="sPuntos" value="1" min="1" max="${datos.maxDescuento}" step="1" data-validar="entero" data-requerido>`) + '</div>' +
+        '<div class="field-group-2">' +
+        campo('Tipo de respaldo *', `<select id="sResp">${opcionesLista(datos.tiposRespaldo)}</select>`) +
+        campo('Referencia del respaldo *', '<input type="text" id="sRef" maxlength="120" placeholder="Folio, N° de oficio, fecha…" data-validar="texto:4" data-requerido>') + '</div>' +
+        '<p class="field-hint" style="text-align:left;">Descuenta los puntos del ítem en el trimestre de la fecha. No valen reclamos informales por WhatsApp, chat o redes sociales.</p>',
+      showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: BTN,
+      preConfirm: () => (formularioInvalido() ? false : {
+        delegacionId: datos.delegacion.id, funcionarioId: Number($('sFun').value), fecha: $('sFecha').value,
+        reclamante: $('sReclamante').value.trim(), motivo: $('sMotivo').value.trim(),
+        itemId: Number($('sItem').value), puntos: Number($('sPuntos').value),
+        respaldoTipo: $('sResp').value, respaldoReferencia: $('sRef').value.trim()
+      })
+    });
+    if(!res.isConfirmed) return;
+    try {
+      const r = await SGR.post('reclamos/', res.value);
+      await cargar();
+      Swal.fire({ icon: 'success', title: 'Reclamo registrado',
+        text: `Se descontaron ${r.puntos} punto${r.puntos === 1 ? '' : 's'} de «${r.item}» a ${r.funcionario}.`, timer: 2400, showConfirmButton: false });
+    } catch(err) { errorFormulario(err); }
+  });
+
+  $('listaReclamos').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-borrar-reclamo]');
+    if(!btn) return;
+    const ok = await Swal.fire({ icon: 'warning', title: '¿Eliminar el reclamo?', text: 'Se devolverán los puntos descontados.',
+      showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: BTN });
+    if(!ok.isConfirmed) return;
+    try {
+      await SGR.eliminar('reclamos', Number(btn.dataset.borrarReclamo));
+      await cargar();
     } catch(err) { errorFormulario(err); }
   });
 

@@ -1191,3 +1191,64 @@ class AtencionOrganizacionYTubo(BaseApi):
         at = Atencion.objects.get(codigo='AT-002')
         self.assertEqual(self.api('post', f'atenciones/{at.pk}/etapa/', {'etapa': 'En proceso'}).status_code, 403)
         self.assertIsNotNone(juan)
+
+
+class Reclamos(BaseApi):
+    def reclamo(self, **cambios):
+        d = {'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk,
+             'funcionarioId': User.objects.get(username='juan.perez').pk,
+             'itemId': ItemMeta.objects.get(codigo='ITM-002').pk,
+             'fecha': '2026-10-20', 'reclamante': 'Vecino del sector',
+             'motivo': 'No se presentó a la visita acordada', 'puntos': 1,
+             'respaldoTipo': 'Carta firmada', 'respaldoReferencia': 'Carta folio 2026-200'}
+        d.update(cambios)
+        return d
+
+    def delegada_del_001(self):
+        from .models import Perfil
+        u = User.objects.create_user('delegada1', 'd1@x.cl', 'Clave1234!', first_name='Delegada')
+        Perfil.objects.create(user=u, rol=Rol.objects.get(nombre='Delegado')).delegaciones.set(
+            Delegacion.objects.filter(codigo='DEL-001'))
+        self.entrar('delegada1', 'Clave1234!')
+
+    def test_solo_el_delegado(self):
+        self.entrar('juan.perez')
+        self.assertEqual(self.json(self.api('post', 'reclamos/', self.reclamo()))['error'], 'solo_delegado')
+        self.entrar_admin()  # el Administrador tampoco
+        self.assertEqual(self.json(self.api('post', 'reclamos/', self.reclamo()))['error'], 'solo_delegado')
+        self.entrar('maria.rojas')  # Delegada, pero de otra delegación
+        self.assertEqual(self.api('post', 'reclamos/', self.reclamo()).status_code, 403)
+
+    def test_descuenta_puntos_del_item_en_el_trimestre(self):
+        juan = User.objects.get(username='juan.perez')
+        item = ItemMeta.objects.get(codigo='ITM-002')  # Juan tiene 1 punto en Q4 2026 (AT-002)
+        self.delegada_del_001()
+        _, antes = M.resumen_funcionario(juan, 2026, 4)
+        fila = next(f for f in antes if f['itemId'] == item.pk)
+        self.assertEqual((fila['puntos'], fila['total']), (1, 1.0))
+        r = self.api('post', 'reclamos/', self.reclamo(puntos=3))
+        self.assertEqual((r.status_code, self.json(r)['puntos']), (201, 3))
+        _, despues = M.resumen_funcionario(juan, 2026, 4)
+        fila = next(f for f in despues if f['itemId'] == item.pk)
+        self.assertEqual((fila['puntos'], fila['descuento'], fila['total']), (1, 3, 0.0))  # nunca bajo 0
+        m = self.json(self.api('get', 'matriz/?trimestre=2026-Q4'))
+        juan_m = next(x for x in m['equipo'] if x['nombre'] == 'Juan Pérez')
+        self.assertEqual((juan_m['reclamos'], juan_m['descuento']), (1, 3))
+        self.assertEqual(len(m['reclamos']), 1)
+        # eliminarlo devuelve los puntos
+        self.assertEqual(self.api('delete', f"reclamos/{self.json(r)['id']}/").status_code, 200)
+        _, otra_vez = M.resumen_funcionario(juan, 2026, 4)
+        self.assertEqual(next(f for f in otra_vez if f['itemId'] == item.pk)['total'], 1.0)
+
+    def test_validaciones(self):
+        self.delegada_del_001()
+        casos = [
+            ({'puntos': 0}, 'numero_invalido'), ({'puntos': 6}, 'numero_invalido'),
+            ({'motivo': 'corto'}, 'texto_corto'), ({'reclamante': ''}, 'campo_vacio'),
+            ({'respaldoReferencia': 'me lo dijo por whatsapp'}, 'respaldo_informal'),
+            ({'fecha': (timezone.localdate() + timedelta(days=1)).isoformat()}, 'fecha_futura'),
+            ({'itemId': ItemMeta.objects.get(codigo='ITM-004').pk}, 'referencia_invalida'),  # ítem inactivo
+            ({'funcionarioId': User.objects.get(username='maria.rojas').pk}, 'referencia_invalida'),  # no es del equipo
+        ]
+        for cambio, esperado in casos:
+            self.assertEqual(self.json(self.api('post', 'reclamos/', self.reclamo(**cambio)))['error'], esperado, cambio)
