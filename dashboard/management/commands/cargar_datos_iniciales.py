@@ -83,22 +83,22 @@ USUARIOS_DEMO = [
 ]
 
 # (código, nombre, tipo, subfamilia, delegación, sector, teléfono, verificación,
-#  directiva: ((presidente, RUT), (tesorero, RUT), (secretario, RUT)))
+#  directiva: ((presidente, RUT, teléfono), (tesorero, RUT, teléfono), (secretario, RUT, teléfono)))
 _T, _F = OrganizacionComunitaria.TERRITORIAL, OrganizacionComunitaria.FUNCIONAL
 _SUB = OrganizacionComunitaria.SUBCATEGORIAS
 ORGANIZACIONES_DEMO = [
     ('ORG-001', 'Junta de Vecinos Villa El Faro', _T, '', 'DEL-001', 'Coquimbo Centro', '+56 9 5555 1111', OrganizacionComunitaria.VERIFICADO,
-     (('Rosa Álvarez', '10.234.567-3'), ('Pedro Contreras', '11.345.678-7'), ('Lucía Rivas', '12.456.789-0'))),
+     (('Rosa Álvarez', '10.234.567-3', '+56 9 6001 4001'), ('Pedro Contreras', '11.345.678-7', '+56 9 6002 4002'), ('Lucía Rivas', '12.456.789-0', '+56 9 6003 4003'))),
     ('ORG-002', 'Junta de Vecinos Las Compañías Norte', _T, '', 'DEL-002', 'Las Compañías', '', OrganizacionComunitaria.PENDIENTE,
-     (('Hernán Gómez', '13.567.890-2'), ('Marta Salinas', '14.678.901-3'), ('Jorge Pizarro', '15.789.012-3'))),
+     (('Hernán Gómez', '13.567.890-2', '+56 9 6004 4004'), ('Marta Salinas', '14.678.901-3', '+56 9 6005 4005'), ('Jorge Pizarro', '15.789.012-3', '+56 9 6006 4006'))),
     ('ORG-003', 'Club de Adulto Mayor Renacer', _F, _SUB[0], 'DEL-001', 'Coquimbo Oriente', '+56 9 5555 2222', OrganizacionComunitaria.PENDIENTE,
-     (('Rosa Álvarez', '10.234.567-3'), ('Elena Vega', '17.901.234-0'), ('Raúl Torres', '18.012.345-8'))),
+     (('Rosa Álvarez', '10.234.567-3', '+56 9 6007 4007'), ('Elena Vega', '17.901.234-0', '+56 9 6008 4008'), ('Raúl Torres', '18.012.345-8', '+56 9 6009 4009'))),
     ('ORG-004', 'Club Deportivo Tierras Blancas', _F, _SUB[1], 'DEL-003', 'Tierras Blancas', '+56 9 5555 3333', OrganizacionComunitaria.VERIFICADO,
-     (('Pablo Rivera', '19.123.456-1'), ('Andrea Campos', '8.234.567-1'), ('Felipe Rojas', '9.345.678-5'))),
+     (('Pablo Rivera', '19.123.456-1', '+56 9 6010 4010'), ('Andrea Campos', '8.234.567-1', '+56 9 6011 4011'), ('Felipe Rojas', '9.345.678-5', '+56 9 6012 4012'))),
     ('ORG-005', 'Centro de Madres Esperanza', _F, _SUB[2], 'DEL-002', 'Las Compañías', '', OrganizacionComunitaria.PENDIENTE,
-     (('Gloria Pizarro', '7.456.789-4'), ('Teresa Muñoz', '6.567.890-K'), ('Carmen Díaz', '5.678.901-4'))),
+     (('Gloria Pizarro', '7.456.789-4', '+56 9 6013 4013'), ('Teresa Muñoz', '6.567.890-K', '+56 9 6014 4014'), ('Carmen Díaz', '5.678.901-4', '+56 9 6015 4015'))),
     ('ORG-006', 'Comité de Seguridad Pasaje Los Aromos', _F, _SUB[3], 'DEL-003', 'Tierras Blancas', '', OrganizacionComunitaria.PENDIENTE,
-     (('Sergio Olivares', '21.789.012-8'), ('Daniela Fuentes', '22.890.123-7'), ('Tomás Araya', '23.901.234-5'))),
+     (('Sergio Olivares', '21.789.012-8', '+56 9 6016 4016'), ('Daniela Fuentes', '22.890.123-7', '+56 9 6017 4017'), ('Tomás Araya', '23.901.234-5', '+56 9 6018 4018'))),
 ]
 
 
@@ -185,12 +185,13 @@ class Command(BaseCommand):
                     'solicitante': sol, 'telefono': tel, 'tipo': tipos[tipo], 'subatencion': subs[sub], 'descripcion': desc,
                     'delegacion': dels[deleg], 'responsable': resp, 'fecha': fecha, 'creado_por': admin_user})
             for codigo, nombre, tipo, sub, deleg, sector, tel, verif, directiva in ORGANIZACIONES_DEMO:
-                (pn, pr), (tn, tr), (sn, sr) = directiva
+                (pn, pr, pt), (tn, tr, tt), (sn, sr, st) = directiva
                 OrganizacionComunitaria.objects.get_or_create(codigo=codigo, defaults={
                     'nombre': nombre, 'tipo': tipo, 'subcategoria': sub, 'delegacion': dels[deleg],
                     'sector': sector, 'telefono': tel, 'verificacion': verif,
-                    'presidente_nombre': pn, 'presidente_rut': pr, 'tesorero_nombre': tn, 'tesorero_rut': tr,
-                    'secretario_nombre': sn, 'secretario_rut': sr})
+                    'presidente_nombre': pn, 'presidente_rut': pr, 'presidente_telefono': pt,
+                    'tesorero_nombre': tn, 'tesorero_rut': tr, 'tesorero_telefono': tt,
+                    'secretario_nombre': sn, 'secretario_rut': sr, 'secretario_telefono': st})
             maria = User.objects.get(username='maria.rojas')
             Ausencia.objects.get_or_create(
                 funcionario=juan, desde=date(2026, 10, 19), defaults={

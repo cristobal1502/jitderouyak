@@ -225,15 +225,18 @@ class OrganizacionComunitaria(models.Model):
     subcategoria = models.CharField(max_length=60, blank=True, choices=[(s, s) for s in SUBCATEGORIAS])
     delegacion = models.ForeignKey(Delegacion, on_delete=models.PROTECT, related_name='organizaciones')
     sector = models.CharField(max_length=120)
-    # Directiva: presidente, tesorero y secretario, cada uno con su RUT (12.345.678-9).
+    # Directiva: presidente, tesorero y secretario, cada uno con nombre, RUT (12.345.678-9) y teléfono.
     # Los tres RUT deben ser distintos dentro de la organización; una persona sí puede
     # ser dirigente de dos organizaciones distintas.
     presidente_nombre = models.CharField(max_length=150, blank=True)
     presidente_rut = models.CharField(max_length=12, blank=True, db_index=True)
+    presidente_telefono = models.CharField(max_length=30, blank=True)
     tesorero_nombre = models.CharField(max_length=150, blank=True)
     tesorero_rut = models.CharField(max_length=12, blank=True, db_index=True)
+    tesorero_telefono = models.CharField(max_length=30, blank=True)
     secretario_nombre = models.CharField(max_length=150, blank=True)
     secretario_rut = models.CharField(max_length=12, blank=True, db_index=True)
+    secretario_telefono = models.CharField(max_length=30, blank=True)
     telefono = models.CharField(max_length=30, blank=True)
     verificacion = models.CharField(max_length=30, choices=VERIFICACIONES, default=PENDIENTE)
     activo = models.BooleanField(default=True)

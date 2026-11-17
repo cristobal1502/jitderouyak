@@ -442,8 +442,8 @@ class UsuariosRecurso(Recurso):
 
 
 def leer_directiva(datos):
-    """Presidente, tesorero y secretario: nombre y RUT obligatorios, y tres RUT distintos.
-    El campo del error se informa como 'directiva.<cargo>.<nombre|rut>'."""
+    """Presidente, tesorero y secretario: nombre, RUT y teléfono obligatorios, y tres RUT distintos.
+    El campo del error se informa como 'directiva.<cargo>.<nombre|rut|telefono>'."""
     directiva = datos.get('directiva')
     if not isinstance(directiva, dict):
         directiva = {}
@@ -465,8 +465,15 @@ def leer_directiva(datos):
         if rut in ruts.values():
             raise ErrorApi('rut_repetido', f'directiva.{cargo}.rut')
         ruts[cargo] = rut
+        telefono = persona.get('telefono') if isinstance(persona.get('telefono'), str) else ''
+        telefono = telefono.strip()
+        if not telefono:
+            raise ErrorApi('campo_vacio', f'directiva.{cargo}.telefono')
+        if not telefono_valido(telefono):
+            raise ErrorApi('telefono_invalido', f'directiva.{cargo}.telefono')
         valores[f'{cargo}_nombre'] = nombre
         valores[f'{cargo}_rut'] = rut
+        valores[f'{cargo}_telefono'] = telefono
     return valores
 
 
@@ -479,6 +486,7 @@ def organizaciones_por_rut(rut):
             if getattr(o, f'{cargo}_rut') == rut:
                 resultado.append({'id': o.pk, 'codigo': o.codigo, 'nombre': o.nombre, 'cargo': etiqueta,
                                   'personaNombre': getattr(o, f'{cargo}_nombre'),
+                                  'personaTelefono': getattr(o, f'{cargo}_telefono'),
                                   'delegacionId': o.delegacion_id, 'delegacionNombre': o.delegacion.nombre,
                                   'verificacion': o.verificacion})
     return resultado
@@ -496,7 +504,8 @@ class OrganizacionesRecurso(ConCodigo):
     def serializar(self, o):
         return {'id': o.pk, 'codigo': o.codigo, 'nombre': o.nombre, 'tipo': o.tipo,
                 'subcategoria': o.subcategoria, 'delegacionId': o.delegacion_id, 'sector': o.sector,
-                'directiva': {cargo: {'nombre': getattr(o, f'{cargo}_nombre'), 'rut': getattr(o, f'{cargo}_rut')}
+                'directiva': {cargo: {'nombre': getattr(o, f'{cargo}_nombre'), 'rut': getattr(o, f'{cargo}_rut'),
+                                      'telefono': getattr(o, f'{cargo}_telefono')}
                               for cargo, _ in OrganizacionComunitaria.CARGOS},
                 'telefono': o.telefono, 'verificacion': o.verificacion, 'estado': estado_txt(o.activo)}
 

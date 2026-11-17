@@ -275,10 +275,11 @@ function mostrarAlerta(caso, ctx = {}){
 /** Traduce un error de la API al popup que corresponde. */
 // Los errores de la directiva llegan como 'directiva.<cargo>.<nombre|rut>'.
 function etiquetaCampo(clave){
-  const m = /^directiva\.(\w+)\.(nombre|rut)$/.exec(clave || '');
+  const m = /^directiva\.(\w+)\.(nombre|rut|telefono)$/.exec(clave || '');
   if(m){
     const cargo = (CARGOS_DIRECTIVA.find(([k]) => k === m[1]) || [])[1] || m[1];
-    return { label: `${m[2] === 'rut' ? 'RUT' : 'Nombre'} ${cargo}`, id: `f_dir_${m[1]}_${m[2]}` };
+    const que = { rut: 'RUT', nombre: 'Nombre', telefono: 'Teléfono' }[m[2]];
+    return { label: `${que} ${cargo}`, id: `f_dir_${m[1]}_${m[2]}` };
   }
   return null;
 }
@@ -356,7 +357,7 @@ function celdaHtml(campo, fila){
   }
   if(campo.tipo === 'directiva'){
     const p = (fila.directiva || {}).presidente || {};
-    return p.nombre ? `${esc(p.nombre)}<span class="due-note">Presidente(a) · ${esc(p.rut || 'sin RUT')}</span>` : '—';
+    return p.nombre ? `${esc(p.nombre)}<span class="due-note">Presidente(a) · ${esc(p.rut || 'sin RUT')}${p.telefono ? ` · ${esc(p.telefono)}` : ''}</span>` : '—';
   }
   if(campo.tipo === 'verificacion'){
     return `<span class="badge ${val === 'Verificado' ? 'aprobada' : 'pendiente'}"><span class="dot"></span>${esc(val)}</span>`;
@@ -372,7 +373,7 @@ function celdaHtml(campo, fila){
 }
 
 function textoFila(fila){
-  const extra = fila.directiva ? Object.values(fila.directiva).map((p) => `${p.nombre} ${p.rut}`).join(' ') : '';
+  const extra = fila.directiva ? Object.values(fila.directiva).map((p) => `${p.nombre} ${p.rut} ${p.telefono || ''}`).join(' ') : '';
   return extra + ' ' + CFG.columnas.map((k) => {
     const v = valorLegible(campoDe(k), fila);
     return Array.isArray(v) ? v.join(' ') : v;
@@ -486,13 +487,15 @@ function campoHtml(c, valor, esNuevo){
     case 'directiva': {
       const d = valor || {};
       control = `<div class="directiva-grid" id="${id}">
-        <span class="directiva-head">Cargo</span><span class="directiva-head">Nombre *</span><span class="directiva-head">RUT *</span>
+        <span class="directiva-head">Cargo</span><span class="directiva-head">Nombre *</span><span class="directiva-head">RUT *</span><span class="directiva-head">Teléfono *</span>
         ${CARGOS_DIRECTIVA.map(([cargo, etiqueta]) => `
           <span class="directiva-cargo">${etiqueta}</span>
           <div class="field"><input type="text" id="f_dir_${cargo}_nombre" aria-label="Nombre ${etiqueta}" maxlength="150"
             value="${esc((d[cargo] || {}).nombre || '')}" data-validar="nombre" data-requerido autocomplete="off"></div>
           <div class="field"><input type="text" id="f_dir_${cargo}_rut" aria-label="RUT ${etiqueta}" maxlength="12"
-            placeholder="12.345.678-5" value="${esc((d[cargo] || {}).rut || '')}" data-validar="rut" data-requerido autocomplete="off"></div>`).join('')}
+            placeholder="12.345.678-5" value="${esc((d[cargo] || {}).rut || '')}" data-validar="rut" data-requerido autocomplete="off"></div>
+          <div class="field"><input type="tel" id="f_dir_${cargo}_telefono" aria-label="Teléfono ${etiqueta}" maxlength="30"
+            placeholder="+56 9 1234 5678" value="${esc((d[cargo] || {}).telefono || '')}" data-validar="telefono" data-requerido autocomplete="off"></div>`).join('')}
       </div>`;
       break;
     }
@@ -509,7 +512,7 @@ function campoHtml(c, valor, esNuevo){
   const ancho = ['textarea', 'multiref', 'multiopcion', 'directiva'].includes(c.tipo) ? ' ancho-completo' : '';
   if(c.tipo === 'directiva'){
     return `<fieldset class="field directiva${ancho}"><legend>${esc(c.label)}${req}
-      <span class="field-hint" style="display:inline;margin-left:6px;">Los tres RUT deben ser distintos</span></legend>${control}</fieldset>`;
+      <span class="field-hint" style="display:inline;margin-left:6px;">Nombre, RUT y teléfono de cada cargo; los tres RUT deben ser distintos</span></legend>${control}</fieldset>`;
   }
   return `<div class="field${ancho}"><label for="${id}">${esc(c.label)}${req}</label>${control}</div>`;
 }
@@ -587,7 +590,8 @@ function leerFormulario(){
       case 'directiva':
         datos[c.key] = Object.fromEntries(CARGOS_DIRECTIVA.map(([cargo]) => [cargo, {
           nombre: document.getElementById(`f_dir_${cargo}_nombre`).value.trim(),
-          rut: document.getElementById(`f_dir_${cargo}_rut`).value.trim()
+          rut: document.getElementById(`f_dir_${cargo}_rut`).value.trim(),
+          telefono: document.getElementById(`f_dir_${cargo}_telefono`).value.trim()
         }]));
         break;
       case 'ref': {
@@ -630,7 +634,7 @@ saveBtn.addEventListener('click', async () => {
   if(guardando) return;
   const campoMalo = SGRValidar.validarTodo(crudForm);
   if(campoMalo){
-    const dirMatch = /^f_dir_(\w+)_(nombre|rut)$/.exec(campoMalo.id);
+    const dirMatch = /^f_dir_([a-z]+)_(nombre|rut|telefono)$/.exec(campoMalo.id);
     const campo = (dirMatch && etiquetaCampo(`directiva.${dirMatch[1]}.${dirMatch[2]}`))
       || campoDe(campoMalo.id.replace(/^f_/, '')) || { label: '' };
     Swal.fire({ icon: 'error', title: `Revisa «${campo.label}»`,

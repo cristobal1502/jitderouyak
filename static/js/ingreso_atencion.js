@@ -125,6 +125,11 @@ async function buscarOrganizacionesPorRut(){
     fSolicitante.value = nombre;  // completa el nombre con el de la directiva
     SGRValidar.validarCampo(fSolicitante, true);
   }
+  const telefono = r.organizaciones[0].personaTelefono;
+  if(!fTelefono.value.trim() && telefono){
+    fTelefono.value = telefono;   // y el teléfono registrado en la directiva
+    SGRValidar.validarCampo(fTelefono, true);
+  }
 }
 
 if(form){

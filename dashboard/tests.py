@@ -650,9 +650,9 @@ class ReglasMatrizSGR(BaseApi):
 
 
 DIRECTIVA_OK = {
-    'presidente': {'nombre': 'Ana Soto', 'rut': '20.111.222-2'},
-    'tesorero': {'nombre': 'Beto Lara', 'rut': '7.654.321-6'},
-    'secretario': {'nombre': 'Cata Mora', 'rut': '15.555.555-6'},
+    'presidente': {'nombre': 'Ana Soto', 'rut': '20.111.222-2', 'telefono': '+56 9 1111 1111'},
+    'tesorero': {'nombre': 'Beto Lara', 'rut': '7.654.321-6', 'telefono': '+56 9 2222 2222'},
+    'secretario': {'nombre': 'Cata Mora', 'rut': '15.555.555-6', 'telefono': '(51) 233 4455'},
 }
 
 
@@ -676,6 +676,8 @@ class Organizaciones(BaseApi):
             ({'directiva': con('secretario', rut=DIRECTIVA_OK['presidente']['rut'])},
              ('rut_repetido', 'directiva.secretario.rut')),
             ({'directiva': con('presidente', nombre='123')}, ('nombre_invalido', 'directiva.presidente.nombre')),
+            ({'directiva': con('tesorero', telefono='')}, ('campo_vacio', 'directiva.tesorero.telefono')),
+            ({'directiva': con('secretario', telefono='123')}, ('telefono_invalido', 'directiva.secretario.telefono')),
         ]
         for cambio, esperado in casos:
             r = self.json(self.api('post', 'organizaciones/', self.datos(**cambio)))
@@ -687,7 +689,7 @@ class Organizaciones(BaseApi):
     def test_misma_persona_en_dos_organizaciones(self):
         self.entrar_admin()
         # Rosa Álvarez ya preside ORG-001 y ORG-003 (datos demo): se permite en otra más
-        rosa = {'nombre': 'Rosa Álvarez', 'rut': '10.234.567-3'}
+        rosa = {'nombre': 'Rosa Álvarez', 'rut': '10.234.567-3', 'telefono': '+56 9 6001 4001'}
         r = self.api('post', 'organizaciones/', self.datos(directiva={**DIRECTIVA_OK, 'tesorero': rosa}))
         self.assertEqual(r.status_code, 201)
 
@@ -697,6 +699,7 @@ class Organizaciones(BaseApi):
         self.assertEqual(r['rut'], '10.234.567-3')
         self.assertEqual(sorted((o['codigo'], o['cargo']) for o in r['organizaciones']),
                          [('ORG-001', 'Presidente(a)'), ('ORG-003', 'Presidente(a)')])
+        self.assertTrue(all(o['personaTelefono'] for o in r['organizaciones']))  # para completar el teléfono
         self.assertEqual(self.json(self.api('get', 'organizaciones/por-rut/?rut=12.345.678-5'))['organizaciones'], [])
         self.assertEqual(self.json(self.api('get', 'organizaciones/por-rut/?rut=1-1'))['error'], 'rut_invalido')
 
