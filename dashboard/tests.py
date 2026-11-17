@@ -1,6 +1,6 @@
 """Pruebas de la API y de los permisos. Ejecutar con:  python manage.py test dashboard login"""
 import json
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
@@ -475,3 +475,136 @@ class DashboardsPorPerfil(BaseApi):
         self.assertNotIn('AT-001', self.html('juan.perez'))
         h = self.html('admin', 'Admin123!')
         self.assertIn('AT-001', h); self.assertIn('AT-002', h)
+
+
+class BusquedaAvanzada(BaseApi):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        juan = User.objects.get(username='juan.perez')
+        maria = User.objects.get(username='maria.rojas')
+        tipo2 = TipoAtencion.objects.get(codigo='TAT-002')
+        tipo3 = TipoAtencion.objects.get(codigo='TAT-003')
+        d1 = Delegacion.objects.get(codigo='DEL-001')
+        d2 = Delegacion.objects.get(codigo='DEL-002')
+        for i in range(12):  # 12 atenciones extra de juan en DEL-001 para probar la paginación
+            Atencion.objects.create(
+                codigo=f'AT-{100 + i}', solicitante=f'Vecino {i}', tipo=tipo2,
+                subatencion=SubAtencion.objects.get(codigo='SUB-004'),
+                descripcion=f'Mediación por ruidos molestos número {i}', delegacion=d1,
+                responsable=juan, fecha=date(2026, 7, 1 + i))
+        Atencion.objects.create(
+            codigo='AT-200', solicitante='Junta de vecinos', tipo=tipo3,
+            subatencion=SubAtencion.objects.get(codigo='SUB-005'),
+            descripcion='Entrega de subsidio de luminaria', delegacion=d2, responsable=maria,
+            fecha=date(2026, 9, 15))
+
+    def buscar(self, **params):
+        from urllib.parse import urlencode
+        return self.api('get', 'busqueda/?' + urlencode(params))
+
+    def codigos(self, resp):
+        return [a['codigo'] for a in self.json(resp)['resultados']]
+
+    def test_exige_sesion(self):
+        self.assertEqual(self.buscar().status_code, 401)
+        self.assertEqual(self.client.get(reverse('busqueda')).status_code, 302)
+
+    def test_paginacion_y_orden(self):
+        self.entrar_admin()
+        r = self.json(self.buscar())
+        self.assertEqual((r['total'], r['paginas'], r['pagina'], len(r['resultados'])), (15, 2, 1, 10))
+        self.assertEqual(r['resultados'][0]['codigo'], 'AT-002')  # la más reciente primero (08/10)
+        r2 = self.json(self.buscar(pagina=2))
+        self.assertEqual(len(r2['resultados']), 5)
+        self.assertEqual(self.json(self.buscar(pagina=99))['pagina'], 2)  # se ajusta a la última
+
+    def test_filtros(self):
+        self.entrar_admin()
+        juan = User.objects.get(username='juan.perez')
+        d2 = Delegacion.objects.get(codigo='DEL-002')
+        self.assertEqual(self.json(self.buscar(funcionario=juan.pk))['total'], 13)
+        self.assertEqual(self.codigos(self.buscar(delegacion=d2.pk)), ['AT-200'])
+        self.assertEqual(self.json(self.buscar(desde='2026-07-01', hasta='2026-07-05'))['total'], 5)
+        tipo3 = TipoAtencion.objects.get(codigo='TAT-003')
+        self.assertEqual(self.codigos(self.buscar(tipo=tipo3.pk)), ['AT-200'])
+        sub = SubAtencion.objects.get(codigo='SUB-003')
+        self.assertEqual(self.codigos(self.buscar(sub=sub.pk)), ['AT-002'])
+        # palabras clave: todas deben aparecer (en descripción, solicitante, código, tipo o sub)
+        self.assertEqual(self.codigos(self.buscar(q='subsidio luminaria')), ['AT-200'])
+        self.assertEqual(self.codigos(self.buscar(q='junta')), ['AT-200'])
+        self.assertEqual(self.codigos(self.buscar(q='at-001')), ['AT-001'])
+        self.assertEqual(self.json(self.buscar(q='ruidos', delegacion=d2.pk))['total'], 0)
+
+    def test_validaciones(self):
+        self.entrar_admin()
+        casos = [
+            ({'desde': 'ayer'}, 'fecha_invalida'),
+            ({'desde': '2026-09-01', 'hasta': '2026-08-01'}, 'rango_invalido'),
+            ({'tipo': 'x'}, 'referencia_invalida'),
+            ({'tipo': 99999}, 'referencia_invalida'),
+            ({'tipo': TipoAtencion.objects.get(codigo='TAT-001').pk,
+              'sub': SubAtencion.objects.get(codigo='SUB-005').pk}, 'sub_no_corresponde'),
+            ({'q': 'x' * 101}, 'texto_largo'),
+        ]
+        for params, esperado in casos:
+            r = self.buscar(**params)
+            self.assertEqual((r.status_code, self.json(r)['error']), (400, esperado), params)
+
+    def test_alcance_del_rol(self):
+        self.entrar('juan.perez')  # Propio: solo lo suyo, aunque busque todo
+        r = self.json(self.buscar())
+        self.assertEqual(r['total'], 13)
+        self.assertNotIn('AT-200', [a['codigo'] for a in r['resultados']])
+        # no puede filtrar por una delegación ajena
+        d2 = Delegacion.objects.get(codigo='DEL-002')
+        self.assertEqual(self.buscar(delegacion=d2.pk).status_code, 403)
+        # filtrar por otro funcionario no revela nada
+        maria = User.objects.get(username='maria.rojas')
+        self.assertEqual(self.json(self.buscar(funcionario=maria.pk))['total'], 0)
+        self.entrar('maria.rojas')  # Delegación DEL-002
+        self.assertEqual(self.codigos(self.buscar()), ['AT-200'])
+
+    def test_opciones_segun_alcance(self):
+        self.entrar('juan.perez')
+        op = self.json(self.api('get', 'busqueda/opciones/'))
+        self.assertEqual([d['nombre'] for d in op['delegaciones']], ['Coquimbo Centro'])
+        self.assertEqual([f['nombre'] for f in op['funcionarios']], ['Juan Pérez'])
+        self.assertFalse(op['puedeExportar'])
+        self.assertIn(2026, op['anios'])
+        # incluye catálogos inactivos para poder buscar el historial
+        self.assertIn('Entrega de materiales', [s['nombre'] for s in op['subatenciones']])
+        self.entrar_admin()
+        op = self.json(self.api('get', 'busqueda/opciones/'))
+        self.assertEqual(len(op['delegaciones']), 4)
+        self.assertEqual(sorted(f['nombre'] for f in op['funcionarios']),
+                         ['Carla Tapia', 'Juan Pérez', 'María Rojas'])
+        self.assertTrue(op['puedeExportar'])
+
+    def test_exportar_excel(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        self.entrar('juan.perez')  # sin "Exportar informes"
+        self.assertEqual(self.api('get', 'busqueda/exportar/').status_code, 403)
+        self.entrar('maria.rojas')
+        r = self.api('get', 'busqueda/exportar/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('.xlsx', r['Content-Disposition'])
+        ws = load_workbook(BytesIO(r.content)).active
+        filas = list(ws.iter_rows(values_only=True))
+        self.assertEqual(filas[0][0], 'Código')
+        self.assertEqual([f[0] for f in filas[1:]], ['AT-200'])  # solo lo de su alcance
+        self.entrar_admin()
+        from urllib.parse import urlencode
+        r = self.api('get', 'busqueda/exportar/?' + urlencode({'q': 'ruidos'}))
+        self.assertEqual(load_workbook(BytesIO(r.content)).active.max_row, 13)  # encabezado + 12
+
+    def test_version_imprimible(self):
+        self.entrar('juan.perez')
+        self.assertEqual(self.client.get(reverse('busqueda_imprimir')).status_code, 403)
+        self.entrar('maria.rojas')
+        html = self.client.get(reverse('busqueda_imprimir')).content.decode()
+        self.assertIn('AT-200', html)
+        self.assertNotIn('AT-101', html)
+        d1 = Delegacion.objects.get(codigo='DEL-001')
+        self.assertEqual(self.client.get(reverse('busqueda_imprimir') + f'?delegacion={d1.pk}').status_code, 403)

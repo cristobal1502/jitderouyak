@@ -978,6 +978,17 @@ button{font-family:inherit;}
   opacity:0.45;
   cursor:not-allowed;
 }
+.page-gap{
+  align-self:center;
+  padding:0 2px;
+  color:var(--ink-faint);
+  font-size:12.5px;
+}
+.export-actions [hidden]{display:none;}
+.cell-sub{
+  font-size:11.5px;
+  color:var(--ink-faint);
+}
 
 
 

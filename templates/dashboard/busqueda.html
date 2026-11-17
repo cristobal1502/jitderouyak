@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/styles.css">
 </head>
-<body>
+<body data-api="{% url 'api_raiz' %}" data-csrf="{{ csrf_token }}" data-login-url="{% url 'login' %}" data-imprimir-url="{% url 'busqueda_imprimir' %}">
 
 <header class="topbar">
   <div class="brand">
@@ -74,14 +74,14 @@
     <div class="page-heading">
       <div>
         <h1>Búsqueda avanzada y reportabilidad</h1>
-        <div class="subtitle">Consulta transversal de registros, evidencias y cumplimiento operativo</div>
+        <div class="subtitle">Consulta transversal de las atenciones registradas, con exportación a Excel y PDF</div>
       </div>
     </div>
 
     <div class="section">
       <div class="section-head">
         <h2>Panel de parámetros de filtrado</h2>
-        <span class="meta">RF-032</span>
+        <span class="meta">RF-032 · Atenciones registradas</span>
       </div>
 
       <div class="filters-panel">
@@ -89,43 +89,31 @@
           <div class="filter-field">
             <label for="fDelegacion">Delegación</label>
             <select id="fDelegacion">
-              <option>Delegación Coquimbo</option>
+              <option value="">Todas mis delegaciones</option>
             </select>
           </div>
           <div class="filter-field">
             <label for="fPeriodo">Período</label>
             <select id="fPeriodo">
-              <option>Q3 2026 (01/07 – 30/09)</option>
-              <option>Q2 2026 (01/04 – 30/06)</option>
-              <option>Q1 2026 (01/01 – 31/03)</option>
+              <option value="">Todo el período</option>
             </select>
           </div>
           <div class="filter-field">
-            <label for="fFuncionario">Funcionario</label>
+            <label for="fFuncionario">Funcionario responsable</label>
             <select id="fFuncionario">
               <option value="">Todos los funcionarios</option>
-              <option value="Juan Pérez">Juan Pérez</option>
-              <option value="María Rojas">María Rojas</option>
-              <option value="C. Tapia">C. Tapia</option>
             </select>
           </div>
           <div class="filter-field">
-            <label for="fItem">Ítem / Meta</label>
-            <select id="fItem">
-              <option value="">Todos los ítems</option>
-              <option value="Operativo en terreno">Operativos en terreno</option>
-              <option value="Atención social">Atención social</option>
-              <option value="Mediación vecinal">Mediación vecinal</option>
-              <option value="Inspección">Inspección</option>
+            <label for="fTipo">Tipo de atención</label>
+            <select id="fTipo">
+              <option value="">Todos los tipos</option>
             </select>
           </div>
           <div class="filter-field">
-            <label for="fEvidencia">Estado evidencia</label>
-            <select id="fEvidencia">
-              <option value="">Todos los estados</option>
-              <option value="Aprobado">Aprobadas</option>
-              <option value="Pendiente">Pendientes</option>
-              <option value="Rechazado">Rechazadas</option>
+            <label for="fSub">Sub atención</label>
+            <select id="fSub">
+              <option value="">Todas las sub atenciones</option>
             </select>
           </div>
           <div class="filter-field filter-field-range">
@@ -141,7 +129,7 @@
         <div class="filters-keywords-row">
           <div class="filter-field filter-field-grow">
             <label for="fPalabras">Palabras clave</label>
-            <input type="text" id="fPalabras" placeholder="luminaria, mediación, etc.">
+            <input type="text" id="fPalabras" placeholder="Código, solicitante, descripción, tipo…" maxlength="100">
           </div>
           <div class="filters-actions">
             <button class="btn-secondary" id="clearFiltersBtn">Limpiar</button>
@@ -155,11 +143,11 @@
       <div class="results-head">
         <span class="results-count">Resultados obtenidos: <b id="resultsCount">0</b> registros coincidentes</span>
         <div class="export-actions">
-          <button class="btn-secondary" id="exportPdfBtn">
+          <button class="btn-secondary" id="exportPdfBtn" hidden>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
             Exportar PDF
           </button>
-          <button class="btn-secondary" id="exportExcelBtn">
+          <button class="btn-secondary" id="exportExcelBtn" hidden>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
             Exportar Excel (.xlsx)
           </button>
@@ -171,17 +159,16 @@
           <tr>
             <th style="width:80px;">Código</th>
             <th style="width:95px;">Fecha</th>
-            <th style="width:110px;">Funcionario</th>
-            <th style="width:150px;">Área / Ítem</th>
+            <th style="width:120px;">Funcionario</th>
+            <th style="width:130px;">Delegación</th>
+            <th style="width:170px;">Tipo / Sub atención</th>
+            <th style="width:150px;">Solicitante</th>
             <th>Descripción</th>
-            <th style="width:100px;">Evidencia</th>
-            <th style="width:100px;">Validación</th>
-            <th style="width:80px;">Puntaje</th>
           </tr>
         </thead>
         <tbody id="resultsBody"></tbody>
       </table>
-      <p class="empty-state" id="emptyState" style="display:none;">No hay registros que coincidan con los filtros aplicados.</p>
+      <p class="empty-state" id="emptyState" style="display:none;">No hay atenciones que coincidan con los filtros aplicados.</p>
 
       <div class="pagination-row">
         <span class="pagination-info" id="paginationInfo"></span>
@@ -192,6 +179,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/api.js"></script>
 <script src="/static/js/busqueda.js"></script>
 </body>
 </html>

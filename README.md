@@ -10,7 +10,7 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
 - **Agenda colectiva** — tubo de trabajo con filtros y seguimiento de compromisos.
 - **Casos sociales** — historial secuencial de atenciones por usuario (hasta 3 gestiones).
 - **Ingreso de atención** — solicitante, tipo, sub atención, descripción, delegación, responsable y fecha.
-- **Búsqueda avanzada** — filtros transversales, exportación y paginación de resultados.
+- **Búsqueda avanzada** — filtros sobre las atenciones (delegación, período, funcionario, tipo, sub atención, fechas y palabras clave), paginación en el servidor y exportación a Excel (.xlsx) y PDF (vista imprimible). Respeta el alcance del rol; exportar requiere el permiso «Exportar informes».
 - **Administración (CRUD)** — Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención y Sub atenciones.
 - **Configuraciones** — perfil, cambio de contraseña y preferencias de notificación.
 
@@ -18,12 +18,12 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
 
 - **Backend:** Django 5.2 (Python), MySQL/MariaDB (phpMyAdmin)
 - **Frontend:** HTML5, CSS3 (sin frameworks), JavaScript vanilla
-- **Librerías:** [SweetAlert2](https://sweetalert2.github.io/) (popups y validaciones)
+- **Librerías:** [SweetAlert2](https://sweetalert2.github.io/) (popups y validaciones), [openpyxl](https://openpyxl.readthedocs.io/) (exportación a Excel)
 - **Tipografía:** Public Sans e IBM Plex Mono (Google Fonts)
 
 > **Qué usa base de datos y qué sigue siendo maqueta**
-> - Con base de datos: Login y sesión, recuperación de contraseña, Administración (Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención, Sub atenciones), Ingreso de atención y Configuraciones.
-> - Aún maqueta (contenido fijo en el HTML/JS): Mi panel, Agenda colectiva, Casos sociales y Búsqueda avanzada.
+> - Con base de datos: Login y sesión, recuperación de contraseña, Administración (Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención, Sub atenciones), Ingreso de atención, Búsqueda avanzada y Configuraciones.
+> - Aún maqueta (contenido fijo en el HTML/JS): Mi panel, Agenda colectiva y Casos sociales.
 
 ## Cómo ejecutarlo
 

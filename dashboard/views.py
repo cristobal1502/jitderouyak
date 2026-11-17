@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import permisos as P
-from .api import atenciones_visibles, casos_visibles
+from .api import BUSQUEDA_MAX_EXPORTAR, ErrorApi, atenciones_visibles, casos_visibles, filtrar_busqueda
 from .models import (
     CasoSocial, Delegacion, GestionSocial, ItemMeta, Perfil, Rol, SubAtencion, TipoAtencion,
 )
@@ -134,6 +134,26 @@ def casos_sociales(request):
 @login_required
 def busqueda(request):
     return render(request, 'dashboard/busqueda.html')
+
+
+@login_required
+def busqueda_imprimir(request):
+    """Versión imprimible de los resultados filtrados (el navegador la guarda como PDF)."""
+    if not P.tiene_permiso(request.user, P.PERM_EXPORTAR):
+        raise PermissionDenied
+    try:
+        qs = filtrar_busqueda(request.user, request.GET)
+    except ErrorApi as e:
+        if e.status == 403:
+            raise PermissionDenied
+        qs = atenciones_visibles(request.user).none()
+    total = qs.count()
+    return render(request, 'dashboard/busqueda_imprimir.html', {
+        'resultados': list(qs[:BUSQUEDA_MAX_EXPORTAR]),
+        'total': total,
+        'recortado': total > BUSQUEDA_MAX_EXPORTAR,
+        'generado': timezone.localtime(),
+    })
 
 
 @login_required

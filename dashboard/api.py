@@ -7,6 +7,9 @@
   GET        api/opciones-atencion/    catálogos activos para el formulario de atención
   GET/POST   api/casos/                casos sociales (según alcance) / crear caso + 1ª gestión
   POST       api/casos/<id>/gestiones/ registrar la gestión 2 o 3 de un caso
+  GET        api/busqueda/             búsqueda avanzada de atenciones (filtros + paginación)
+  GET        api/busqueda/opciones/    valores de los filtros según el alcance del rol
+  GET        api/busqueda/exportar/    los mismos resultados en Excel (.xlsx), requiere "Exportar informes"
   GET/PUT    api/yo/                   perfil propio y preferencias
   POST       api/yo/password/          cambio de contraseña propio
 
@@ -22,7 +25,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, ProtectedError, Q
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -647,6 +650,166 @@ def atenciones(request):
     if atencion is None:
         raise ErrorApi('duplicado', 'codigo')
     return JsonResponse(serializar_atencion(atencion), status=201)
+
+
+# ---------------------------------------------------------- búsqueda avanzada
+BUSQUEDA_POR_PAGINA = 10
+BUSQUEDA_MAX_POR_PAGINA = 100
+BUSQUEDA_MAX_EXPORTAR = 5000
+
+
+def _leer_pk(params, key):
+    valor = (params.get(key) or '').strip()
+    if not valor:
+        return None
+    try:
+        return int(valor)
+    except ValueError:
+        raise ErrorApi('referencia_invalida', key)
+
+
+def _leer_fecha(params, key):
+    valor = (params.get(key) or '').strip()
+    if not valor:
+        return None
+    try:
+        return date.fromisoformat(valor)
+    except ValueError:
+        raise ErrorApi('fecha_invalida', key)
+
+
+def filtrar_busqueda(user, params):
+    """Atenciones visibles para el usuario que cumplen los filtros de la query string.
+    Parámetros (todos opcionales): delegacion, funcionario, tipo, sub (ids), desde, hasta
+    (AAAA-MM-DD) y q (palabras clave en código, solicitante, descripción, tipo y sub atención)."""
+    qs = atenciones_visibles(user)
+
+    delegacion = _leer_pk(params, 'delegacion')
+    if delegacion is not None:
+        if not P.delegaciones_de(user).filter(pk=delegacion).exists():
+            raise ErrorApi('prohibido', 'delegacion', status=403)
+        qs = qs.filter(delegacion_id=delegacion)
+
+    funcionario = _leer_pk(params, 'funcionario')
+    if funcionario is not None:
+        qs = qs.filter(responsable_id=funcionario)
+
+    tipo = _leer_pk(params, 'tipo')
+    if tipo is not None:
+        if not TipoAtencion.objects.filter(pk=tipo).exists():
+            raise ErrorApi('referencia_invalida', 'tipo')
+        qs = qs.filter(tipo_id=tipo)
+
+    sub = _leer_pk(params, 'sub')
+    if sub is not None:
+        sub_obj = SubAtencion.objects.filter(pk=sub).first()
+        if sub_obj is None:
+            raise ErrorApi('referencia_invalida', 'sub')
+        if tipo is not None and sub_obj.tipo_id != tipo:
+            raise ErrorApi('sub_no_corresponde', 'sub')
+        qs = qs.filter(subatencion_id=sub)
+
+    desde, hasta = _leer_fecha(params, 'desde'), _leer_fecha(params, 'hasta')
+    if desde and hasta and desde > hasta:
+        raise ErrorApi('rango_invalido', 'desde')
+    if desde:
+        qs = qs.filter(fecha__gte=desde)
+    if hasta:
+        qs = qs.filter(fecha__lte=hasta)
+
+    q = (params.get('q') or '').strip()
+    if len(q) > 100:
+        raise ErrorApi('texto_largo', 'q', '100')
+    for palabra in q.split():
+        qs = qs.filter(Q(codigo__icontains=palabra) | Q(solicitante__icontains=palabra)
+                       | Q(descripcion__icontains=palabra) | Q(tipo__nombre__icontains=palabra)
+                       | Q(subatencion__nombre__icontains=palabra))
+
+    return qs.order_by('-fecha', '-id')
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['GET'])
+def busqueda(request):
+    qs = filtrar_busqueda(request.user, request.GET)
+    try:
+        pagina = max(1, int(request.GET.get('pagina') or 1))
+        por_pagina = int(request.GET.get('por_pagina') or BUSQUEDA_POR_PAGINA)
+    except ValueError:
+        raise ErrorApi('referencia_invalida', 'pagina')
+    por_pagina = min(max(1, por_pagina), BUSQUEDA_MAX_POR_PAGINA)
+
+    total = qs.count()
+    paginas = max(1, -(-total // por_pagina))
+    pagina = min(pagina, paginas)
+    inicio = (pagina - 1) * por_pagina
+    return JsonResponse({
+        'total': total, 'pagina': pagina, 'paginas': paginas, 'porPagina': por_pagina,
+        'resultados': [serializar_atencion(a) for a in qs[inicio:inicio + por_pagina]],
+    })
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['GET'])
+def opciones_busqueda(request):
+    """Valores para los filtros. Incluye registros inactivos: sirven para buscar el historial."""
+    user = request.user
+    responsables = (User.objects.filter(pk__in=atenciones_visibles(user).values('responsable'))
+                    .order_by('first_name', 'last_name', 'username'))
+    fechas = atenciones_visibles(user).order_by().values_list('fecha__year', flat=True).distinct()
+    return JsonResponse({
+        'delegaciones': [{'id': d.pk, 'nombre': d.nombre} for d in P.delegaciones_de(user).order_by('nombre')],
+        'funcionarios': [{'id': u.pk, 'nombre': P.nombre_visible(u)} for u in responsables],
+        'tipos': [{'id': t.pk, 'nombre': t.nombre} for t in TipoAtencion.objects.order_by('nombre')],
+        'subatenciones': [{'id': s.pk, 'nombre': s.nombre, 'tipoId': s.tipo_id}
+                          for s in SubAtencion.objects.order_by('nombre')],
+        'anios': sorted(set(fechas) | {timezone.localdate().year}, reverse=True),
+        'puedeExportar': P.tiene_permiso(user, P.PERM_EXPORTAR),
+    })
+
+
+COLUMNAS_EXPORTAR = ['Código', 'Fecha', 'Funcionario', 'Delegación', 'Tipo de atención',
+                     'Sub atención', 'Solicitante', 'Descripción']
+
+
+def filas_exportar(qs):
+    for a in qs[:BUSQUEDA_MAX_EXPORTAR]:
+        yield [a.codigo, a.fecha, P.nombre_visible(a.responsable), a.delegacion.nombre,
+               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.descripcion]
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['GET'])
+def exportar_busqueda(request):
+    exigir(request, P.PERM_EXPORTAR)
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    qs = filtrar_busqueda(request.user, request.GET)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Atenciones'
+    ws.append(COLUMNAS_EXPORTAR)
+    for celda in ws[1]:
+        celda.font = Font(bold=True, color='FFFFFF')
+        celda.fill = PatternFill('solid', fgColor='C41230')
+    for fila in filas_exportar(qs):
+        ws.append(fila)
+    for celda in ws['B'][1:]:
+        celda.number_format = 'DD/MM/YYYY'
+    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 60], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = ancho
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = ws.dimensions
+
+    resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="busqueda_atenciones_{timezone.localdate():%Y%m%d}.xlsx"'
+    wb.save(resp)
+    return resp
 
 
 # ------------------------------------------------------------------ perfil propio

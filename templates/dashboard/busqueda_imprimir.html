@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte de atenciones — SGR Municipal</title>
+<style>
+  @page { size: A4 landscape; margin: 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Public Sans", Arial, sans-serif; color: #2A1F1E; background: #fff; margin: 24px; font-size: 11px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #C41230; padding-bottom: 8px; margin-bottom: 14px; }
+  h1 { font-size: 17px; margin: 0 0 3px; }
+  .meta { color: #6B5A58; font-size: 10.5px; }
+  .aviso { background: #FDECEE; border: 1px solid #C41230; padding: 6px 10px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #C41230; color: #fff; text-align: left; padding: 6px; font-size: 10.5px; }
+  td { border-bottom: 1px solid #E5DCDB; padding: 5px 6px; vertical-align: top; }
+  tr:nth-child(even) td { background: #FAF6F5; }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  .mono { font-family: "IBM Plex Mono", monospace; white-space: nowrap; }
+  .sub { color: #6B5A58; }
+  .vacio { padding: 20px; text-align: center; color: #6B5A58; }
+  .acciones { margin-bottom: 14px; }
+  .acciones button { background: #C41230; color: #fff; border: 0; padding: 8px 14px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
+  @media print { body { margin: 0; } .acciones { display: none; } }
+</style>
+</head>
+<body>
+  <div class="acciones"><button type="button" onclick="window.print()">Imprimir / Guardar como PDF</button></div>
+  <header>
+    <div>
+      <h1>Búsqueda avanzada · Atenciones</h1>
+      <div class="meta">SGR Municipal · {{ sgr_delegacion }}</div>
+    </div>
+    <div class="meta">
+      Generado por {{ sgr_nombre }} el {{ generado|date:"d/m/Y H:i" }}<br>
+      {{ total }} registro{{ total|pluralize }}
+    </div>
+  </header>
+
+  {% if recortado %}
+  <p class="aviso">Se muestran los primeros {{ resultados|length }} de {{ total }} registros. Acota los filtros para obtener un reporte completo.</p>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th><th>Fecha</th><th>Funcionario</th><th>Delegación</th>
+        <th>Tipo / Sub atención</th><th>Solicitante</th><th>Descripción</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in resultados %}
+      <tr>
+        <td class="mono">{{ a.codigo }}</td>
+        <td class="mono">{{ a.fecha|date:"d/m/Y" }}</td>
+        <td>{{ a.responsable.get_full_name|default:a.responsable.username }}</td>
+        <td>{{ a.delegacion.nombre }}</td>
+        <td>{{ a.tipo.nombre }}<br><span class="sub">{{ a.subatencion.nombre }}</span></td>
+        <td>{{ a.solicitante }}</td>
+        <td>{{ a.descripcion }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="vacio">No hay atenciones que coincidan con los filtros aplicados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <script>window.addEventListener('load', () => setTimeout(() => window.print(), 300));</script>
+</body>
+</html>
