@@ -12,6 +12,7 @@ PERMISOS = [
     'Gestionar agenda',
     'Gestionar usuarios',
     'Administrar catálogos',
+    'Gestionar organizaciones',
     'Exportar informes',
 ]
 PERM_USUARIOS = 'Gestionar usuarios'
@@ -20,6 +21,7 @@ PERM_REGISTRAR = 'Registrar actividades'
 PERM_VALIDAR = 'Validar evidencias'
 PERM_AGENDA = 'Gestionar agenda'
 PERM_EXPORTAR = 'Exportar informes'
+PERM_ORGANIZACIONES = 'Gestionar organizaciones'  # editar el registro de organizaciones comunitarias
 
 ALCANCE_TODAS = 'Todas las delegaciones'
 ALCANCE_DELEGACION = 'Delegación'
@@ -37,6 +39,9 @@ def perfil_de(user):
 
 
 def tiene_permiso(user, permiso):
+    """permiso puede ser un texto o una tupla de textos (basta con tener uno)."""
+    if isinstance(permiso, (tuple, list)):
+        return any(tiene_permiso(user, p) for p in permiso)
     if not user.is_authenticated or not user.is_active:
         return False
     if user.is_superuser:
@@ -61,7 +66,7 @@ def delegaciones_de(user):
 
 
 def es_delegado(user):
-    """True si el rol del usuario es de Delegado (p. ej. 'Delegado' o 'Delegado / Jefatura')."""
+    """True si el rol del usuario es de Delegado (el cargo 'Delegado' o el antiguo 'Delegado / Jefatura')."""
     perfil = perfil_de(user)
     return bool(perfil and perfil.rol.nombre.strip().lower().startswith('delegado'))
 

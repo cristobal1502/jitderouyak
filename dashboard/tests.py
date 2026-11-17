@@ -932,3 +932,72 @@ class AusenciasYFelicitaciones(BaseApi):
             r = self.json(self.api('post', 'felicitaciones/', self.felicitacion(**cambio)))
             self.assertEqual(r['error'], esperado, cambio)
         self.assertEqual(Felicitacion.objects.filter(funcionario__username='laura.mena').count(), 1)  # solo la demo
+
+
+class RolesDeCargo(BaseApi):
+    """Los 7 perfiles de cargo de la delegación como roles del sistema."""
+
+    def usuario(self, username, rol, delegacion='DEL-001'):
+        from .models import Perfil
+        u = User.objects.create_user(username, f'{username}@muni.cl', 'Clave1234!', first_name=username.title())
+        p = Perfil.objects.create(user=u, rol=Rol.objects.get(nombre=rol))
+        p.delegaciones.set(Delegacion.objects.filter(codigo=delegacion))
+        return u
+
+    def test_existen_los_siete_cargos(self):
+        from .cargos import ROLES_CARGO
+        from .permisos import PERMISOS
+        self.assertEqual(len(ROLES_CARGO), 7)
+        for nombre, _, permisos, alcance in ROLES_CARGO:
+            rol = Rol.objects.get(nombre=nombre)
+            self.assertTrue(rol.descripcion)
+            self.assertEqual((rol.permisos, rol.alcance), (permisos, alcance))
+            self.assertTrue(set(permisos) <= set(PERMISOS), nombre)
+            self.assertIn('Registrar actividades', permisos)  # todos son parte del equipo de la matriz
+
+    def test_delegado_gestiona_su_equipo(self):
+        d = self.usuario('delegada', 'Delegado')
+        self.entrar('delegada', 'Clave1234!')
+        r = self.json(self.api('get', 'matriz/'))
+        self.assertTrue(r['puedeGestionar'])
+        self.assertIn('Delegada', [m['nombre'] for m in r['equipo']])
+        juan = User.objects.get(username='juan.perez').pk
+        r = self.api('post', 'ausencias/', {'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk,
+                                            'funcionarioId': juan, 'tipo': 'Vacaciones',
+                                            'desde': '2026-12-01', 'hasta': '2026-12-05'})
+        self.assertEqual(r.status_code, 201)
+        # puede editar organizaciones, pero no los demás catálogos
+        self.assertIn('data-solo-lectura="0"', self.client.get(reverse('organizaciones')).content.decode())
+        self.assertEqual(self.api('post', 'delegaciones/', {'nombre': 'X', 'direccion': 'x', 'comuna': 'y'}).status_code, 403)
+        self.assertIsNotNone(d)
+
+    def test_encargado_de_organizaciones(self):
+        self.usuario('orgs', 'Organizaciones Comunitarias')
+        self.entrar('orgs', 'Clave1234!')
+        datos = {'nombre': 'Club de Adulto Mayor Nuevo', 'tipo': OrganizacionComunitaria.FUNCIONAL,
+                 'subcategoria': 'Club de Adulto Mayor', 'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk,
+                 'sector': 'Centro', 'verificacion': 'Verificado', 'estado': 'Activo'}
+        self.assertEqual(self.api('post', 'organizaciones/', datos).status_code, 201)
+        otra = {**datos, 'delegacionId': Delegacion.objects.get(codigo='DEL-002').pk}
+        self.assertEqual(self.api('post', 'organizaciones/', otra).status_code, 403)
+        self.assertEqual(self.client.get(reverse('administracion', args=['items'])).status_code, 403)
+        # no puede registrar ausencias ni felicitaciones (no es Delegado)
+        self.assertFalse(self.json(self.api('get', 'matriz/'))['puedeGestionar'])
+
+    def test_alcance_propio_del_gestor_social(self):
+        self.usuario('gestor', 'Gestor Social (Trabajador Social)')
+        self.entrar('gestor', 'Clave1234!')
+        op = self.json(self.api('get', 'opciones-atencion/'))
+        self.assertEqual([r['nombre'] for r in op['responsables']], ['Gestor'])
+
+    def test_apoyo_administrativo_registra_para_el_equipo(self):
+        self.usuario('apoyo', 'Apoyo Administrativo')
+        self.entrar('apoyo', 'Clave1234!')
+        op = self.json(self.api('get', 'opciones-atencion/'))
+        self.assertIn('Juan Pérez', [r['nombre'] for r in op['responsables']])
+
+    def test_nuevo_permiso_en_roles(self):
+        self.entrar_admin()
+        r = self.api('post', 'roles/', {'nombre': 'Encargado JJVV', 'descripcion': 'x',
+                                        'permisos': ['Ver panel', 'Gestionar organizaciones'], 'alcance': 'Delegación'})
+        self.assertEqual(r.status_code, 201)

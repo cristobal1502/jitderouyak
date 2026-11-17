@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from dashboard.cargos import ROLES_CARGO
 from dashboard.models import (
     Atencion, Ausencia, CasoSocial, Delegacion, Felicitacion, GestionSocial, ItemMeta,
     OrganizacionComunitaria, Perfil, Rol, SubAtencion, TipoAtencion,
@@ -126,7 +127,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **opts):
         roles = {}
-        for nombre, desc, permisos, alcance in ROLES:
+        for nombre, desc, permisos, alcance in ROLES + ROLES_CARGO:
             roles[nombre], _ = Rol.objects.get_or_create(
                 nombre=nombre, defaults={'descripcion': desc, 'permisos': permisos, 'alcance': alcance})
 

@@ -8,7 +8,7 @@
 // Debe coincidir con dashboard/permisos.py (PERMISOS).
 const OPC_PERMISOS = [
   'Ver panel', 'Registrar actividades', 'Validar evidencias', 'Gestionar agenda',
-  'Gestionar usuarios', 'Administrar catálogos', 'Exportar informes'
+  'Gestionar usuarios', 'Administrar catálogos', 'Gestionar organizaciones', 'Exportar informes'
 ];
 const OPC_ALCANCE = ['Propio', 'Delegación', 'Todas las delegaciones'];
 // Deben coincidir con OrganizacionComunitaria (dashboard/models.py).

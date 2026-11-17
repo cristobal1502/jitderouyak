@@ -17,10 +17,26 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
   - Cada actividad lleva un ítem de la matriz y un estado: «En preparación» (correos, coordinar, invitar: no suma) o «Ejecutada» (suma 1 punto). Las de preparación se marcan después como ejecutadas.
   - Tope de 120%: cuando un ítem llega al 120% de la meta del mes deja de sumar y se avisa cuáles ítems están más bajos.
 - **Matriz SGR (vista de equipo)** — avance grupal de la delegación por ítem y por funcionario, con semáforo (≥100% verde, 70–99% amarillo, <70% rojo) y medida de equilibrio. La meta mensual de cada ítem se define en Ítems y metas y se rebaja en proporción a los días hábiles de ausencia. Solo el Delegado registra ausencias (vacaciones, licencias, días libres) y felicitaciones, estas últimas con respaldo formal obligatorio.
-- **Organizaciones** — registro de juntas de vecinos y organizaciones funcionales (subfamilias: Adulto Mayor, Deportivas, Centros de Madres/Culturales/Juveniles, Comités), con estado «Verificado / Pendiente de revisión». Todos lo consultan; lo editan quienes tienen «Administrar catálogos».
+- **Organizaciones** — registro de juntas de vecinos y organizaciones funcionales (subfamilias: Adulto Mayor, Deportivas, Centros de Madres/Culturales/Juveniles, Comités), con estado «Verificado / Pendiente de revisión». Todos lo consultan; lo editan quienes tienen «Administrar catálogos» o «Gestionar organizaciones».
 - **Búsqueda avanzada** — filtros sobre las atenciones (delegación, período, funcionario, tipo, sub atención, fechas y palabras clave), paginación en el servidor y exportación a Excel (.xlsx) y PDF (vista imprimible). Respeta el alcance del rol; exportar requiere el permiso «Exportar informes».
 - **Administración (CRUD)** — Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención y Sub atenciones.
 - **Configuraciones** — perfil, cambio de contraseña y preferencias de notificación.
+
+## Perfiles de cargo (roles)
+
+Los 7 cargos de una delegación vienen creados como roles (se crean solos al correr `migrate`). Sus permisos y alcance se pueden ajustar en Administración → Roles.
+
+| Cargo | Funciones | Permisos principales | Alcance |
+|---|---|---|---|
+| Delegado | Representante del alcalde en el territorio; dirige al equipo. Único que registra ausencias y felicitaciones. | Registrar, validar, agenda, organizaciones, exportar | Delegación |
+| Gestor Social (Trabajador Social) | Casos sociales, visitas a domicilio y derivaciones. | Registrar | Propio |
+| Apoyo Administrativo | Atención en oficina, agenda del delegado, registro en la planilla SGR. | Registrar, agenda | Delegación |
+| Organizaciones Comunitarias | Crea, legaliza y capacita a JJVV y agrupaciones; mantiene su registro. | Registrar, organizaciones | Delegación |
+| Gestor de Compras y Proyectos | Compras de materiales y contratación de servicios. | Registrar | Propio |
+| Gestión y Planificación | Revisa metas, analiza puntajes de la matriz, informes y reuniones semanales. | Registrar, agenda, exportar | Delegación |
+| Coordinador de Servicios Comunitarios | Operativos de limpieza, desmalezado y reciclaje; supervisa cuadrillas. | Registrar, agenda | Delegación |
+
+El permiso nuevo «Gestionar organizaciones» permite editar el registro de organizaciones sin acceso a los demás catálogos. Los roles anteriores (Delegado / Jefatura, Funcionario, etc.) se mantienen para no afectar a los usuarios que ya los tienen.
 
 ## Tecnologías utilizadas
 

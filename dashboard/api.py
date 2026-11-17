@@ -441,7 +441,7 @@ class UsuariosRecurso(Recurso):
 class OrganizacionesRecurso(ConCodigo):
     slug = 'organizaciones'
     modelo = OrganizacionComunitaria
-    permiso_escritura = P.PERM_CATALOGOS
+    permiso_escritura = (P.PERM_CATALOGOS, P.PERM_ORGANIZACIONES)
     prefijo = 'ORG'
 
     def consulta(self):
