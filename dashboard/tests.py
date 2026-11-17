@@ -954,3 +954,89 @@ class RolesDeCargo(BaseApi):
         r = self.api('post', 'roles/', {'nombre': 'Encargado JJVV', 'descripcion': 'x',
                                         'permisos': ['Ver panel', 'Gestionar organizaciones'], 'alcance': 'Delegación'})
         self.assertEqual(r.status_code, 201)
+
+
+class DelegacionActiva(BaseApi):
+    """Selector de delegación de la barra superior."""
+
+    def elegir(self, valor, siguiente='/dashboard/'):
+        return self.client.post(reverse('cambiar_delegacion'), {'delegacion': valor, 'next': siguiente})
+
+    def test_filtra_el_panel(self):
+        self.entrar_admin()
+        html = self.client.get(reverse('dashboard')).content.decode()
+        self.assertIn('AT-001', html); self.assertIn('AT-002', html)
+        self.assertIn('Todas las delegaciones', html)
+        d3 = Delegacion.objects.get(codigo='DEL-003')  # Tierras Blancas: solo AT-001
+        r = self.elegir(d3.pk)
+        self.assertRedirects(r, '/dashboard/', fetch_redirect_response=False)
+        html = self.client.get(reverse('dashboard')).content.decode()
+        self.assertIn('AT-001', html); self.assertNotIn('AT-002', html)
+        self.assertIn('Mostrando solo <strong>Tierras Blancas</strong>', html)
+        self.assertIn(f'data-delegacion-activa="{d3.pk}"', html)
+        # «Todas» vuelve a mostrar todo
+        self.elegir('')
+        html = self.client.get(reverse('dashboard')).content.decode()
+        self.assertIn('AT-002', html)
+
+    def test_no_acepta_delegaciones_ajenas_ni_inactivas(self):
+        self.entrar('maria.rojas')  # solo DEL-002
+        self.elegir(Delegacion.objects.get(codigo='DEL-001').pk)
+        self.assertNotIn('sgr_delegacion_activa', self.client.session)
+        self.entrar_admin()
+        self.elegir(Delegacion.objects.get(codigo='DEL-004').pk)  # inactiva
+        self.assertNotIn('sgr_delegacion_activa', self.client.session)
+        self.elegir('abc')
+        self.assertNotIn('sgr_delegacion_activa', self.client.session)
+
+    def test_redirige_solo_al_mismo_sitio(self):
+        self.entrar_admin()
+        r = self.elegir('', siguiente='https://sitio-malicioso.example/')
+        self.assertEqual(r['Location'], reverse('dashboard'))
+        r = self.elegir('', siguiente='/dashboard/matriz/')
+        self.assertEqual(r['Location'], '/dashboard/matriz/')
+
+    def test_solo_post(self):
+        self.entrar_admin()
+        self.assertEqual(self.client.get(reverse('cambiar_delegacion')).status_code, 405)
+
+    def test_selector_solo_con_varias_delegaciones(self):
+        self.entrar('maria.rojas')  # una sola delegación: texto fijo, sin menú
+        html = self.client.get(reverse('dashboard')).content.decode()
+        self.assertNotIn('id="delegacionMenu"', html)
+        self.assertIn('Las Compañías', html)
+        self.entrar_admin()
+        html = self.client.get(reverse('dashboard')).content.decode()
+        self.assertIn('id="delegacionMenu"', html)
+
+
+class ValidacionEntradas(BaseApi):
+    datos = Atenciones.datos
+
+    def test_rut_del_vecino(self):
+        from .api import ErrorApi, validar_rut
+        self.assertEqual(validar_rut('12345678-5'), '12.345.678-5')
+        self.assertEqual(validar_rut('9.876.543-3'), '9.876.543-3')
+        for malo in ('12.345.678-9', '1234', 'abc', '12.345.678-'):
+            with self.assertRaises(ErrorApi):
+                validar_rut(malo)
+        self.entrar('juan.perez')
+        r = self.json(self.api('post', 'atenciones/', self.datos(rut='12.345.678-9')))
+        self.assertEqual((r['error'], r['campo']), ('rut_invalido', 'rut'))
+        r = self.api('post', 'atenciones/', self.datos(rut='123456785'))
+        self.assertEqual((r.status_code, self.json(r)['rut']), (201, '12.345.678-5'))
+        r = self.api('post', 'atenciones/', self.datos(rut=''))  # es opcional
+        self.assertEqual((r.status_code, self.json(r)['rut']), (201, ''))
+        # se puede buscar por RUT
+        self.assertEqual(self.json(self.api('get', 'busqueda/?q=12.345.678-5'))['total'], 1)
+
+    def test_nombre_y_telefono(self):
+        self.entrar('juan.perez')
+        self.assertEqual(self.json(self.api('post', 'atenciones/', self.datos(solicitante='12345')))['error'],
+                         'nombre_invalido')
+        self.assertEqual(self.json(self.api('put', 'yo/', {'telefono': '123'}))['error'], 'telefono_invalido')
+        self.assertEqual(self.api('put', 'yo/', {'telefono': ''}).status_code, 200)  # vacío se permite
+        self.entrar_admin()
+        org = {'nombre': 'Club X', 'tipo': OrganizacionComunitaria.TERRITORIAL, 'sector': 'Centro',
+               'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk, 'telefono': '12-3', 'estado': 'Activo'}
+        self.assertEqual(self.json(self.api('post', 'organizaciones/', org))['error'], 'telefono_invalido')

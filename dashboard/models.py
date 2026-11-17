@@ -114,6 +114,7 @@ class Atencion(models.Model):
     codigo = models.CharField(max_length=20, unique=True)
     solicitante = models.CharField(max_length=150)
     telefono = models.CharField(max_length=30, blank=True, default='')  # teléfono del vecino
+    rut = models.CharField(max_length=12, blank=True, default='')       # RUT del vecino (opcional), formato 12.345.678-9
     clasificacion = models.CharField(max_length=30, choices=CLASIFICACIONES, default=CIUDADANA)
     item = models.ForeignKey(ItemMeta, on_delete=models.PROTECT, related_name='atenciones', null=True, blank=True)
     estado = models.CharField(max_length=20, choices=ESTADOS, default=EJECUTADA)

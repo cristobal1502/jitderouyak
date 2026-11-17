@@ -88,6 +88,8 @@ const SGR = (() => {
     get:         (ruta) => pedir('GET', ruta),
     post:        (ruta, datos) => pedir('POST', ruta, datos || {}),
     put:         (ruta, datos) => pedir('PUT', ruta, datos),
-    alertaComun, esc, formatearFecha
+    alertaComun, esc, formatearFecha,
+    /** Delegación elegida en la barra superior (id) o null si se eligió «Todas». */
+    delegacionActiva: () => Number((document.getElementById('delegacionSelect') || { dataset: {} }).dataset.delegacionActiva) || null
   };
 })();

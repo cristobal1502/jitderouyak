@@ -10,6 +10,7 @@ urlpatterns = [
     path('busqueda/imprimir/', views.busqueda_imprimir, name='busqueda_imprimir'),
     path('organizaciones/', views.organizaciones, name='organizaciones'),
     path('matriz/', views.matriz, name='matriz'),
+    path('delegacion/', views.cambiar_delegacion, name='cambiar_delegacion'),
     path('ingreso-atencion/', views.ingreso_atencion, name='ingreso_atencion'),
     path('configuraciones/', views.configuraciones, name='configuraciones'),
     path('administracion/<slug:entidad>/', views.administracion, name='administracion'),

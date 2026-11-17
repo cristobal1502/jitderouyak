@@ -118,12 +118,13 @@ const ENTIDADES = {
         activoSi: { key: 'tipo', valor: ORG_FUNCIONAL } },
       { key: 'delegacionId', label: 'Delegación', tipo: 'ref', refApi: 'delegaciones', requerido: true },
       { key: 'sector', label: 'Sector', tipo: 'texto', requerido: true },
-      { key: 'representante', label: 'Representante / presidente(a)', tipo: 'texto' },
-      { key: 'telefono', label: 'Teléfono de contacto', tipo: 'texto' },
+      { key: 'representante', label: 'Representante / presidente(a)', tipo: 'texto', validar: 'nombre' },
+      { key: 'telefono', label: 'Teléfono de contacto', tipo: 'texto', validar: 'telefono' },
       { key: 'verificacion', label: 'Verificación', tipo: 'verificacion', opciones: OPC_VERIFICACION },
       { key: 'estado', label: 'Estado', tipo: 'estado' }
     ],
     columnas: ['codigo', 'nombre', 'tipo', 'subcategoria', 'delegacionId', 'sector', 'verificacion', 'estado'],
+    porDelegacion: true,  // respeta la delegación elegida en la barra superior
     // Filtro rápido junto al buscador: [etiqueta, función que decide si la fila se muestra]
     filtros: [
       ['Todas las organizaciones', () => true],
@@ -334,7 +335,9 @@ function textoFila(fila){
 function renderTabla(){
   const term = buscarInput.value.trim().toLowerCase();
   const filtro = CFG.filtros && filtroExtra ? CFG.filtros[Number(filtroExtra.value) || 0][1] : () => true;
-  const visibles = filas.filter((f) => filtro(f) && (!term || textoFila(f).toLowerCase().includes(term)));
+  const activa = CFG.porDelegacion ? SGR.delegacionActiva() : null;
+  const visibles = filas.filter((f) => (!activa || f.delegacionId === activa) &&
+    filtro(f) && (!term || textoFila(f).toLowerCase().includes(term)));
   const extras = (CFG.accionesExtra || []);
 
   tablaBody.innerHTML = visibles.map((f) => `
@@ -386,14 +389,21 @@ function opcionesRef(campo, seleccionado){
   ).join('');
 }
 
+/* Atributos para la validación en vivo (validacion.js). */
+function attrsValidacion(c){
+  const regla = c.validar || (c.tipo === 'correo' ? 'correo' : c.tipo === 'numero' ? 'entero' : '');
+  return `${regla ? ` data-validar="${regla}"` : ''}${c.requerido && !c.auto ? ' data-requerido' : ''}`;
+}
+
 function campoHtml(c, valor, esNuevo){
   const id = `f_${c.key}`;
+  const va = attrsValidacion(c);
   const req = c.requerido ? ' <span class="required">*</span>' : '';
   let control = '';
 
   switch(c.tipo){
     case 'textarea':
-      control = `<textarea id="${id}">${esc(valor || '')}</textarea>`;
+      control = `<textarea id="${id}"${va}>${esc(valor || '')}</textarea>`;
       break;
     case 'estado':
       control = `<select id="${id}">
@@ -402,7 +412,7 @@ function campoHtml(c, valor, esNuevo){
       </select>`;
       break;
     case 'opcion':
-      control = `<select id="${id}"><option value="">Selecciona…</option>${
+      control = `<select id="${id}"${va}><option value="">Selecciona…</option>${
         c.opciones.map((o) => `<option ${o === valor ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
       break;
     case 'verificacion':
@@ -410,7 +420,7 @@ function campoHtml(c, valor, esNuevo){
         c.opciones.map((o) => `<option ${o === (valor || c.opciones[0]) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
       break;
     case 'ref':
-      control = `<select id="${id}"><option value="">Selecciona…</option>${opcionesRef(c, valor)}</select>`;
+      control = `<select id="${id}"${va}><option value="">Selecciona…</option>${opcionesRef(c, valor)}</select>`;
       break;
     case 'multiref':
       control = `<div class="checkbox-grid" id="${id}">${(referencias[c.refApi] || []).map((r) => `
@@ -423,16 +433,16 @@ function campoHtml(c, valor, esNuevo){
         ${esc(o)}</label>`).join('')}</div>`;
       break;
     case 'correo':
-      control = `<input type="email" id="${id}" value="${esc(valor || '')}" autocomplete="off">`;
+      control = `<input type="email" id="${id}" value="${esc(valor || '')}" autocomplete="off"${va}>`;
       break;
     case 'numero':
-      control = `<input type="number" id="${id}" value="${esc(valor ?? '')}" min="${c.min ?? ''}" max="${c.max ?? ''}" step="1">`;
+      control = `<input type="number" id="${id}" value="${esc(valor ?? '')}" min="${c.min ?? ''}" max="${c.max ?? ''}" step="1"${va}>`;
       break;
     default:
       // El código se genera en el servidor al crear (DEL-001, ITM-001, ...).
       control = (c.auto && esNuevo)
         ? `<input type="text" id="${id}" value="" placeholder="Se genera automáticamente" disabled>`
-        : `<input type="text" id="${id}" value="${esc(valor || '')}" autocomplete="off">`;
+        : `<input type="text" id="${id}" value="${esc(valor || '')}" autocomplete="off"${va}>`;
   }
   return `<div class="field"><label for="${id}">${esc(c.label)}${req}</label>${control}</div>`;
 }
@@ -514,6 +524,14 @@ function validar(datos){
 
 saveBtn.addEventListener('click', async () => {
   if(guardando) return;
+  const campoMalo = SGRValidar.validarTodo(crudForm);
+  if(campoMalo){
+    const campo = campoDe(campoMalo.id.replace(/^f_/, '')) || { label: '' };
+    Swal.fire({ icon: 'error', title: `Revisa «${campo.label}»`,
+      text: (document.getElementById(`${campoMalo.id}-msg`) || {}).textContent || 'El dato no es válido.', confirmButtonColor: BTN })
+      .then(() => campoMalo.focus());
+    return;
+  }
   const datos = leerFormulario();
   const problema = validar(datos);
   if(problema){

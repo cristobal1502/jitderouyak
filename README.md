@@ -5,6 +5,8 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
 ## Vistas incluidas
 
 - **Login** — ingreso con usuario o correo y contraseña; el acceso y el menú dependen del rol.
+- **Selector de delegación** — el botón «Delegación …» de la barra superior despliega las delegaciones del usuario (y «Todas»). La elección se guarda en la sesión: el panel muestra solo esa delegación y la búsqueda, la matriz, el ingreso y organizaciones parten con ella seleccionada. Solo aparece si el usuario tiene más de una delegación.
+- **Validación mientras se escribe** — RUT (se formatea solo y revisa el dígito verificador), teléfono, correo, nombres, textos mínimos y contraseña muestran el error bajo cada campo al escribir. El servidor vuelve a validar todo.
 - **Menú lateral contraíble** — un botón en la barra superior lo reduce a solo íconos (el nombre aparece al pasar el mouse); la preferencia se recuerda en el navegador.
 - **Recuperar contraseña** — solicitud de código por correo → **Validar código** (vigencia de 5 min, reenvío cada 30 s y 3 intentos, controlados por el servidor) → **Crear nueva contraseña** → retorno al login.
 - **Mi panel** — resumen de metas del período e historial de actividades.
@@ -170,7 +172,8 @@ static/
 └── js/         api.js (cliente fetch), crud.js (motor de los 6 CRUD), ingreso_atencion.js,
                 configuraciones.js, login.js, forgot_password.js, validar_codigo.js,
                 reset_password.js, script.js, agenda.js, busqueda.js, matriz.js,
-                sidebar.js (menú contraíble)
+                layout.js (menú contraíble y selector de delegación),
+                validacion.js (validación en vivo de RUT, teléfono, correo…)
 ```
 
 > La base de datos vive en MySQL (se consulta en phpMyAdmin). Tablas principales: `dashboard_delegacion`, `dashboard_rol`, `dashboard_perfil`, `dashboard_itemmeta`, `dashboard_tipoatencion`, `dashboard_subatencion`, `dashboard_atencion`, `auth_user`, `login_codigorecuperacion`.

@@ -128,10 +128,17 @@
     buscar(1);
   }
 
+  // Parte con la delegación elegida en la barra superior (si hay una).
+  function delegacionInicial(){
+    const activa = SGR.delegacionActiva();
+    if(activa && [...f.delegacion.options].some(o => o.value === String(activa))) f.delegacion.value = String(activa);
+  }
+
   function limpiar(){
     Object.values(f).forEach(el => { el.value = ''; });
+    delegacionInicial();
     opcionesSub();
-    filtrosAplicados = {};
+    filtrosAplicados = f.delegacion.value ? { delegacion: f.delegacion.value } : {};
     buscar(1);
   }
 
@@ -258,5 +265,9 @@
     }
   }
 
-  cargarOpciones().then(() => buscar(1));
+  cargarOpciones().then(() => {
+    delegacionInicial();
+    filtrosAplicados = f.delegacion.value ? { delegacion: f.delegacion.value } : {};
+    buscar(1);
+  });
 })();

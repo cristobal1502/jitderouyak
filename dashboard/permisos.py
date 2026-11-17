@@ -71,6 +71,18 @@ def es_delegado(user):
     return bool(perfil and perfil.rol.nombre.strip().lower().startswith('delegado'))
 
 
+SESION_DELEGACION = 'sgr_delegacion_activa'
+
+
+def delegacion_activa(request):
+    """Delegación elegida en la barra superior, o None si se eligió «Todas».
+    Solo vale si está entre las delegaciones del usuario (si no, se ignora)."""
+    pk = request.session.get(SESION_DELEGACION)
+    if not pk:
+        return None
+    return delegaciones_de(request.user).filter(pk=pk).first()
+
+
 def nombre_visible(user):
     return user.get_full_name().strip() or user.first_name or user.username
 

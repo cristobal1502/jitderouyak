@@ -2,9 +2,11 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils import timezone
 
@@ -59,17 +61,21 @@ def _accesos_mantenedores(user):
     return accesos
 
 
-def contexto_dashboard(user):
-    """Cifras reales del panel según el alcance del rol (mismas reglas que la API)."""
+def contexto_dashboard(user, delegacion=None):
+    """Cifras reales del panel según el alcance del rol (mismas reglas que la API).
+    Con una delegación elegida en la barra superior, todo se limita a esa delegación."""
     tipo = P.tipo_dashboard(user)
     atenciones = atenciones_visibles(user)
     hoy = timezone.localdate()
     inicio_mes = hoy.replace(day=1)
 
-    total_aten = atenciones.count()
     organizaciones = OrganizacionComunitaria.objects.filter(activo=True)
     if P.alcance_de(user) != P.ALCANCE_TODAS:
         organizaciones = organizaciones.filter(delegacion__in=P.delegaciones_de(user))
+    if delegacion is not None:
+        atenciones = atenciones.filter(delegacion=delegacion)
+        organizaciones = organizaciones.filter(delegacion=delegacion)
+    total_aten = atenciones.count()
 
     titulo, subtitulo = PERFILES_TXT[tipo]
     ctx = {
@@ -88,22 +94,28 @@ def contexto_dashboard(user):
         'por_tipo': _barras(atenciones, 'tipo__nombre', total_aten),
         'puede_registrar': P.tiene_permiso(user, P.PERM_REGISTRAR),
         'mes_actual': hoy.strftime('%m/%Y'),
+        'delegacion_activa': delegacion,
     }
 
     if tipo == P.DASH_ADMINISTRADOR:
         usuarios = Perfil.objects.select_related('user', 'rol')
+        if delegacion is not None:
+            usuarios = usuarios.filter(delegaciones=delegacion).distinct()
         ctx.update({
             'usuarios_activos': usuarios.filter(user__is_active=True).count(),
             'usuarios_inactivos': usuarios.filter(user__is_active=False).count(),
             'delegaciones_activas': Delegacion.objects.filter(activo=True).count(),
             'por_rol': [{'nombre': r.nombre, 'n': r.n} for r in
-                        Rol.objects.annotate(n=Count('perfiles')).order_by('-n', 'nombre')],
+                        Rol.objects.annotate(n=Count('perfiles', filter=Q(perfiles__in=usuarios), distinct=True))
+                        .filter(n__gt=0).order_by('-n', 'nombre')],
             'por_delegacion': _barras(atenciones, 'delegacion__nombre', total_aten),
             'accesos': _accesos_mantenedores(user),
             'ultimos_usuarios': list(usuarios.order_by('-pk')[:5]),
         })
     elif tipo == P.DASH_SUPERVISOR:
         mis_delegaciones = P.delegaciones_de(user)
+        if delegacion is not None:
+            mis_delegaciones = mis_delegaciones.filter(pk=delegacion.pk)
         ctx.update({
             'por_delegacion': _barras(atenciones, 'delegacion__nombre', total_aten),
             'accesos': _accesos_mantenedores(user),
@@ -116,7 +128,24 @@ def contexto_dashboard(user):
 
 @login_required
 def dashboard(request):
-    return render(request, 'dashboard/dashboard.html', contexto_dashboard(request.user))
+    return render(request, 'dashboard/dashboard.html',
+                  contexto_dashboard(request.user, P.delegacion_activa(request)))
+
+
+@login_required
+@require_POST
+def cambiar_delegacion(request):
+    """Selector de la barra superior: guarda en la sesión la delegación elegida ('' = todas)."""
+    valor = request.POST.get('delegacion', '').strip()
+    if valor and valor.isdigit() and P.delegaciones_de(request.user).filter(pk=int(valor), activo=True).exists():
+        request.session[P.SESION_DELEGACION] = int(valor)
+    else:
+        request.session.pop(P.SESION_DELEGACION, None)
+    destino = request.POST.get('next') or reverse('dashboard')
+    if not url_has_allowed_host_and_scheme(destino, allowed_hosts={request.get_host()},
+                                           require_https=request.is_secure()):
+        destino = reverse('dashboard')
+    return redirect(destino)
 
 
 @login_required

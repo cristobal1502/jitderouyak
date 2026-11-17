@@ -1,6 +1,6 @@
 from .permisos import (
     ALCANCE_TODAS, PERM_CATALOGOS, PERM_REGISTRAR, PERM_USUARIOS,
-    alcance_de, delegaciones_de, iniciales, nombre_visible, perfil_de, tiene_permiso,
+    alcance_de, delegacion_activa, delegaciones_de, iniciales, nombre_visible, perfil_de, tiene_permiso,
 )
 
 
@@ -14,11 +14,17 @@ def sgr(request):
     puede_usuarios = tiene_permiso(user, PERM_USUARIOS)
     puede_catalogos = tiene_permiso(user, PERM_CATALOGOS)
 
-    if alcance_de(user) == ALCANCE_TODAS:
-        delegacion = 'Todas las delegaciones'
+    disponibles = list(delegaciones_de(user).filter(activo=True).order_by('nombre'))
+    activa = delegacion_activa(request)
+    todas = 'Todas las delegaciones' if alcance_de(user) == ALCANCE_TODAS else 'Todas mis delegaciones'
+    if activa:
+        delegacion = activa.nombre
+    elif len(disponibles) == 1:
+        delegacion = disponibles[0].nombre
+    elif disponibles:
+        delegacion = todas
     else:
-        nombres = [d.nombre for d in delegaciones_de(user)]
-        delegacion = ', '.join(nombres) if nombres else 'Sin delegación'
+        delegacion = 'Sin delegación'
 
     if user.is_superuser and perfil is None:
         rol = 'Superusuario'
@@ -30,6 +36,9 @@ def sgr(request):
         'sgr_iniciales': iniciales(user),
         'sgr_rol': rol,
         'sgr_delegacion': delegacion,
+        'sgr_delegaciones': disponibles,              # opciones del selector de la barra superior
+        'sgr_delegacion_activa_id': activa.pk if activa else '',
+        'sgr_delegacion_todas': todas,
         'sgr_puede_usuarios': puede_usuarios,
         'sgr_puede_catalogos': puede_catalogos,
         'sgr_puede_admin': puede_usuarios or puede_catalogos,

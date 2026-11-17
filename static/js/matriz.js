@@ -23,7 +23,8 @@
   /* ---------- Carga ---------- */
   async function cargar(){
     const p = new URLSearchParams();
-    if(fDelegacion.value) p.set('delegacion', fDelegacion.value);
+    const delegacion = fDelegacion.value || SGR.delegacionActiva();  // la primera vez: la elegida arriba
+    if(delegacion) p.set('delegacion', delegacion);
     if(fMes.value) p.set('mes', fMes.value);
     try {
       datos = await SGR.get('matriz/?' + p.toString());
@@ -124,6 +125,15 @@
   const opcionesLista = (lista) => lista.map((x) => `<option>${esc(x)}</option>`).join('');
   const campo = (label, control) => `<div class="field" style="text-align:left;"><label>${label}</label>${control}</div>`;
 
+  // Valida el formulario del popup con las mismas reglas en vivo; si falla, el popup no se cierra.
+  function formularioInvalido(){
+    const malo = SGRValidar.validarTodo(Swal.getHtmlContainer());
+    if(!malo) return false;
+    Swal.showValidationMessage('Revisa los campos marcados en rojo.');
+    malo.focus();
+    return true;
+  }
+
   /* ---------- Ausencias (solo Delegado) ---------- */
   ausenciaBtn.addEventListener('click', async () => {
     const res = await Swal.fire({
@@ -131,12 +141,12 @@
       html: campo('Funcionario *', `<select id="sFun">${opcionesEquipo()}</select>`) +
         campo('Tipo *', `<select id="sTipo">${opcionesLista(datos.tiposAusencia)}</select>`) +
         '<div class="field-group-2">' +
-        campo('Desde *', `<input type="date" id="sDesde" value="${hoy()}">`) +
-        campo('Hasta *', `<input type="date" id="sHasta" value="${hoy()}">`) + '</div>' +
+        campo('Desde *', `<input type="date" id="sDesde" value="${hoy()}" data-requerido>`) +
+        campo('Hasta *', `<input type="date" id="sHasta" value="${hoy()}" data-requerido>`) + '</div>' +
         campo('Observación', '<input type="text" id="sObs" maxlength="200" placeholder="Opcional">') +
         '<p class="field-hint" style="text-align:left;">La meta del funcionario se rebaja en proporción a los días hábiles ausentes.</p>',
       showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: BTN,
-      preConfirm: () => ({
+      preConfirm: () => (formularioInvalido() ? false : {
         delegacionId: datos.delegacion.id, funcionarioId: Number($('sFun').value), tipo: $('sTipo').value,
         desde: $('sDesde').value, hasta: $('sHasta').value, observacion: $('sObs').value.trim()
       })
@@ -168,13 +178,13 @@
       html: campo('Funcionario felicitado *', `<select id="sFun">${opcionesEquipo()}</select>`) +
         '<div class="field-group-2">' +
         campo('Fecha *', `<input type="date" id="sFecha" value="${hoy()}" max="${hoy()}">`) +
-        campo('Quién felicita *', '<input type="text" id="sEmisor" maxlength="150" placeholder="Vecino(a), junta de vecinos, institución…">') + '</div>' +
-        campo('Motivo *', '<textarea id="sMotivo" placeholder="Qué destacó del funcionario"></textarea>') +
+        campo('Quién felicita *', '<input type="text" id="sEmisor" maxlength="150" placeholder="Vecino(a), junta de vecinos, institución…" data-validar="nombre" data-requerido>') + '</div>' +
+        campo('Motivo *', '<textarea id="sMotivo" placeholder="Qué destacó del funcionario" data-validar="texto:10" data-requerido></textarea>') +
         campo('Tipo de respaldo *', `<select id="sResp">${opcionesLista(datos.tiposRespaldo)}</select>`) +
-        campo('Referencia del respaldo *', '<input type="text" id="sRef" maxlength="120" placeholder="Folio, N° de oficio, asunto y fecha del correo…">') +
+        campo('Referencia del respaldo *', '<input type="text" id="sRef" maxlength="120" placeholder="Folio, N° de oficio, asunto y fecha del correo…" data-validar="texto:4" data-requerido>') +
         '<p class="field-hint" style="text-align:left;">No valen mensajes informales por WhatsApp, chat o redes sociales.</p>',
       showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: BTN,
-      preConfirm: () => ({
+      preConfirm: () => (formularioInvalido() ? false : {
         delegacionId: datos.delegacion.id, funcionarioId: Number($('sFun').value), fecha: $('sFecha').value,
         emisor: $('sEmisor').value.trim(), motivo: $('sMotivo').value.trim(),
         respaldoTipo: $('sResp').value, respaldoReferencia: $('sRef').value.trim()

@@ -123,9 +123,19 @@ function manejarErrorPassword(err){
   }
 }
 
+function camposConError(form){
+  const malo = SGRValidar.validarTodo(form);
+  if(!malo) return false;
+  Swal.fire({ icon: 'error', title: 'Revisa los campos marcados',
+    text: (document.getElementById(`${malo.id}-msg`) || {}).textContent || 'Hay datos con errores.', confirmButtonColor: BTN_COLOR })
+    .then(() => malo.focus());
+  return true;
+}
+
 perfilForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   limpiarErrores(perfilForm);
+  if(camposConError(perfilForm)) return;
 
   const nombre = pNombre.value.trim();
   const correo = pCorreo.value.trim();
@@ -150,6 +160,7 @@ perfilForm.addEventListener('submit', async (e) => {
 passwordForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   limpiarErrores(passwordForm);
+  if(camposConError(passwordForm)) return;
 
   const actual = passActual.value;
   const nueva = passNueva.value;

@@ -41,6 +41,11 @@ CORREO_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
 TELEFONO_RE = re.compile(r'^[0-9+()\s-]{0,30}$')
 
 
+def telefono_valido(telefono):
+    """Solo números, espacios y + ( ) -, con 8 a 15 dígitos."""
+    return bool(TELEFONO_RE.fullmatch(telefono)) and 8 <= len(re.sub(r'\D', '', telefono)) <= 15
+
+
 class ErrorApi(Exception):
     def __init__(self, caso, campo=None, detalle='', status=400):
         super().__init__(caso)
@@ -472,7 +477,7 @@ class OrganizacionesRecurso(ConCodigo):
             raise ErrorApi('prohibido', 'delegacionId', status=403)
 
         telefono = (datos.get('telefono') or '').strip()
-        if telefono and not TELEFONO_RE.fullmatch(telefono):
+        if telefono and not telefono_valido(telefono):
             raise ErrorApi('telefono_invalido', 'telefono')
 
         verificacion = datos.get('verificacion') or OrganizacionComunitaria.PENDIENTE
@@ -635,7 +640,7 @@ def reiniciar_password(request, pk):
 # ------------------------------------------------------------------ atenciones
 def serializar_atencion(a):
     return {
-        'id': a.pk, 'codigo': a.codigo, 'solicitante': a.solicitante, 'telefono': a.telefono,
+        'id': a.pk, 'codigo': a.codigo, 'solicitante': a.solicitante, 'rut': a.rut, 'telefono': a.telefono,
         'clasificacion': a.clasificacion,
         'itemId': a.item_id, 'itemNombre': a.item.nombre if a.item_id else '',
         'estado': a.estado, 'ejecutadaEl': a.ejecutada_el.isoformat() if a.ejecutada_el else None,
@@ -704,13 +709,26 @@ def primera_fecha_abierta(hoy=None):
     return lunes - timedelta(days=7) if hoy.weekday() == 0 else lunes
 
 
+def validar_rut(texto, key='rut'):
+    """Devuelve el RUT con formato 12.345.678-9 o lanza ErrorApi('rut_invalido') (módulo 11)."""
+    limpio = re.sub(r'[.\s-]', '', str(texto or '')).upper()
+    if not re.fullmatch(r'\d{7,8}[\dK]', limpio):
+        raise ErrorApi('rut_invalido', key)
+    cuerpo, dv = limpio[:-1], limpio[-1]
+    suma = sum(int(d) * f for d, f in zip(reversed(cuerpo), (2, 3, 4, 5, 6, 7) * 2))
+    resto = 11 - suma % 11
+    esperado = '0' if resto == 11 else 'K' if resto == 10 else str(resto)
+    if dv != esperado:
+        raise ErrorApi('rut_invalido', key)
+    return f'{int(cuerpo):,}'.replace(',', '.') + '-' + dv
+
+
 def leer_telefono(datos, key='telefono'):
     telefono = datos.get(key)
     telefono = telefono.strip() if isinstance(telefono, str) else ''
     if not telefono:
         raise ErrorApi('campo_vacio', key)
-    digitos = re.sub(r'\D', '', telefono)
-    if not TELEFONO_RE.fullmatch(telefono) or not 8 <= len(digitos) <= 15:
+    if not telefono_valido(telefono):
         raise ErrorApi('telefono_invalido', key)
     return telefono
 
@@ -731,6 +749,10 @@ def solicitante_es_delegado(solicitante, delegacion):
 
 def _validar_atencion(datos, user):
     solicitante = leer_texto(datos, 'solicitante', 150)
+    if not re.search(r'[^\W\d_]', solicitante):  # al menos una letra: no vale un número o símbolo suelto
+        raise ErrorApi('nombre_invalido', 'solicitante')
+    rut = (datos.get('rut') or '').strip() if isinstance(datos.get('rut'), str) else ''
+    rut = validar_rut(rut) if rut else ''
     telefono = leer_telefono(datos)
 
     tipo = leer_id(datos, 'tipoId', TipoAtencion)
@@ -785,7 +807,7 @@ def _validar_atencion(datos, user):
     es_delegado = datos.get('solicitanteEsDelegado') is True or solicitante_es_delegado(solicitante, delegacion)
     clasificacion = Atencion.OTRA_GESTION if es_delegado else Atencion.CIUDADANA
 
-    return {'solicitante': solicitante, 'telefono': telefono, 'tipo': tipo, 'subatencion': sub,
+    return {'solicitante': solicitante, 'rut': rut, 'telefono': telefono, 'tipo': tipo, 'subatencion': sub,
             'item': item, 'estado': estado, 'ejecutada_el': fecha if estado == Atencion.EJECUTADA else None,
             'descripcion': descripcion, 'delegacion': delegacion, 'responsable': responsable,
             'fecha': fecha, 'clasificacion': clasificacion}
@@ -939,7 +961,7 @@ def filtrar_busqueda(user, params):
         raise ErrorApi('texto_largo', 'q', '100')
     for palabra in q.split():
         qs = qs.filter(Q(codigo__icontains=palabra) | Q(solicitante__icontains=palabra)
-                       | Q(telefono__icontains=palabra)
+                       | Q(telefono__icontains=palabra) | Q(rut__icontains=palabra)
                        | Q(descripcion__icontains=palabra) | Q(tipo__nombre__icontains=palabra)
                        | Q(subatencion__nombre__icontains=palabra))
 
@@ -992,14 +1014,14 @@ def opciones_busqueda(request):
 
 
 COLUMNAS_EXPORTAR = ['Código', 'Fecha', 'Funcionario', 'Delegación', 'Tipo de atención',
-                     'Sub atención', 'Solicitante', 'Teléfono', 'Clasificación', 'Ítem / meta', 'Estado',
+                     'Sub atención', 'Solicitante', 'RUT', 'Teléfono', 'Clasificación', 'Ítem / meta', 'Estado',
                      'Puntaje', 'Descripción']
 
 
 def filas_exportar(qs):
     for a in qs[:BUSQUEDA_MAX_EXPORTAR]:
         yield [a.codigo, a.fecha, P.nombre_visible(a.responsable), a.delegacion.nombre,
-               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.telefono, a.clasificacion,
+               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.rut, a.telefono, a.clasificacion,
                a.item.nombre if a.item_id else '', a.estado, a.puntaje, a.descripcion]
 
 
@@ -1024,7 +1046,7 @@ def exportar_busqueda(request):
         ws.append(fila)
     for celda in ws['B'][1:]:
         celda.number_format = 'DD/MM/YYYY'
-    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 16, 20, 24, 14, 9, 60], start=1):
+    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 13, 16, 20, 24, 14, 9, 60], start=1):
         ws.column_dimensions[get_column_letter(i)].width = ancho
     ws.freeze_panes = 'A2'
     ws.auto_filter.ref = ws.dimensions
@@ -1075,7 +1097,7 @@ def yo(request):
     cambios_perfil = {}
     if 'telefono' in datos and (perfil is not None or datos['telefono']):
         telefono = str(datos['telefono'] or '').strip()
-        if not TELEFONO_RE.match(telefono):
+        if telefono and not telefono_valido(telefono):
             raise ErrorApi('telefono_invalido', 'telefono')
         cambios_perfil['telefono'] = telefono
     for clave, campo in (('prefVencidos', 'pref_vencidos'), ('prefEvidencias', 'pref_evidencias'),

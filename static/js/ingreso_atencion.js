@@ -4,6 +4,7 @@ const BTN = 'var(--red-primary)';
 const form = document.getElementById('atencionForm'); // null si el rol no tiene permiso para registrar
 const fSolicitante = document.getElementById('aSolicitante');
 const fTelefono = document.getElementById('aTelefono');
+const fRut = document.getElementById('aRut');
 const fEsDelegado = document.getElementById('aEsDelegado');
 const fechaAyuda = document.getElementById('fechaAyuda');
 const fFecha = document.getElementById('aFecha');
@@ -81,6 +82,17 @@ function mostrarAlerta(caso, ctx = {}){
     case 'telefono_vacio':
       Swal.fire({ icon: 'error', title: 'Falta el teléfono del vecino(a)', text: 'Sin el teléfono del usuario la actividad no se puede guardar ni suma puntaje.', confirmButtonColor: BTN });
       marcar(fTelefono); break;
+    case 'campos_invalidos':
+      Swal.fire({ icon: 'error', title: ctx.titulo || 'Revisa los campos marcados',
+        text: ctx.detalle || 'Hay datos con errores; el mensaje aparece bajo cada campo.', confirmButtonColor: BTN });
+      if(ctx.campo) ctx.campo.focus();
+      break;
+    case 'rut_invalido':
+      Swal.fire({ icon: 'error', title: 'RUT inválido', text: 'El RUT no es válido: revisa los números y el dígito verificador.', confirmButtonColor: BTN });
+      marcar(fRut); break;
+    case 'nombre_invalido':
+      Swal.fire({ icon: 'error', title: 'Nombre inválido', text: 'Escribe el nombre del vecino(a), no solo números o símbolos.', confirmButtonColor: BTN });
+      marcar(fSolicitante); break;
     case 'telefono_invalido':
       Swal.fire({ icon: 'error', title: 'Teléfono inválido', text: 'Ingresa un teléfono de 8 a 15 dígitos (puedes usar espacios y los signos + ( ) -).', confirmButtonColor: BTN });
       marcar(fTelefono); break;
@@ -170,6 +182,9 @@ function manejarError(err){
       return mostrarAlerta('fecha_futura');
     case 'telefono_invalido':
       return mostrarAlerta('telefono_invalido');
+    case 'rut_invalido':
+    case 'nombre_invalido':
+      return mostrarAlerta(err.error);
     case 'semana_cerrada':
       return mostrarAlerta('semana_cerrada', { limite: err.detalle });
     case 'limite_diario':
@@ -217,7 +232,7 @@ function renderTabla(){
     <tr>
       <td class="code-cell">${esc(a.codigo)}</td>
       <td>${SGR.formatearFecha(a.fecha)}</td>
-      <td>${esc(a.solicitante)}${a.telefono ? `<span class="due-note">${esc(a.telefono)}</span>` : ''}${
+      <td>${esc(a.solicitante)}${a.rut ? `<span class="due-note">${esc(a.rut)}</span>` : ''}${a.telefono ? `<span class="due-note">${esc(a.telefono)}</span>` : ''}${
         a.clasificacion === 'Otra gestión' ? '<br><span class="tag-otra-gestion">Otra gestión</span>' : ''}</td>
       <td>${esc(a.tipoNombre)}<span class="due-note">${esc(a.subNombre)}</span></td>
       <td>${celdaPuntaje(a)}</td>
@@ -288,6 +303,8 @@ function limpiar(){
   form.reset();
   form.querySelectorAll('.field-invalid').forEach((el) => el.classList.remove('field-invalid'));
   fFecha.value = hoy();
+  const activa = SGR.delegacionActiva();  // la delegación elegida arriba queda preseleccionada
+  if(activa && opcionesApi.delegaciones.some((d) => d.id === activa)) fDelegacion.value = String(activa);
   cargarSubatenciones();
   cargarResponsables();
 }
@@ -300,7 +317,18 @@ if(form){
     if(enviando) return;
     form.querySelectorAll('.field-invalid').forEach((el) => el.classList.remove('field-invalid'));
 
+    // Primero la validación en vivo: deja el mensaje bajo cada campo con error.
+    const campoMalo = SGRValidar.validarTodo(form);
+    if(campoMalo){
+      const label = form.querySelector(`label[for="${campoMalo.id}"]`);
+      const detalle = (document.getElementById(`${campoMalo.id}-msg`) || {}).textContent;
+      mostrarAlerta('campos_invalidos', { campo: campoMalo,
+        titulo: label ? `Revisa: ${label.textContent.replace(/\*|opcional/g, '').trim()}` : '', detalle });
+      return;
+    }
+
     const solicitante = fSolicitante.value.trim();
+    const rut = fRut.value.trim();
     const telefono = fTelefono.value.trim();
     const descripcion = fDescripcion.value.trim();
 
@@ -322,6 +350,7 @@ if(form){
     try {
       const registro = await SGR.post('atenciones/', {
         solicitante,
+        rut,
         telefono,
         solicitanteEsDelegado: fEsDelegado.checked,
         itemId: Number(fItem.value),
