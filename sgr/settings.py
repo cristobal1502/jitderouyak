@@ -16,7 +16,12 @@ def _cargar_env(ruta):
         if not linea or linea.startswith('#') or '=' not in linea:
             continue
         clave, _, valor = linea.partition('=')
-        os.environ.setdefault(clave.strip(), valor.strip().strip('"').strip("'"))
+        valor = valor.strip()
+        if valor[:1] in ('"', "'"):
+            valor = valor[1:].split(valor[0], 1)[0]  # entre comillas: se respeta tal cual
+        else:
+            valor = valor.split(' #', 1)[0].split('\t#', 1)[0].strip()  # quita comentario al final
+        os.environ.setdefault(clave.strip(), valor)
 
 
 _cargar_env(BASE_DIR / '.env')
