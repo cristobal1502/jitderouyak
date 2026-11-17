@@ -1485,3 +1485,37 @@ html.sidebar-collapsed .sidebar-foot{display:none;}
 .field select.field-invalid,
 .field textarea.field-invalid,
 .settings-card .field input.field-invalid{border-color:var(--sem-rojo); box-shadow:0 0 0 3px var(--sem-rojo-soft);}
+
+/* ---------- Modales sin barra de desplazamiento ---------- */
+/* Más anchos y en dos columnas para que el formulario quepa entero en pantallas de notebook. */
+.modal.modal-lg{max-width:760px;}
+.modal-body{padding:18px 22px 4px;}
+.crud-grid{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0 18px; grid-auto-flow:row dense;}
+.crud-grid .checkbox-grid{grid-template-columns:repeat(3, minmax(0, 1fr));}
+.crud-grid .field{margin-bottom:14px; min-width:0;}
+.crud-grid .ancho-completo{grid-column:1 / -1;}
+.crud-grid textarea{min-height:58px;}
+/* Si aun así la pantalla es muy baja (por ejemplo, un celular), solo el cuerpo se desplaza —sin barra
+   visible— y el título y los botones Guardar / Cancelar quedan siempre a la vista. */
+.modal{display:flex; flex-direction:column; overflow:hidden;}
+.modal-head, .modal-foot{flex:none;}
+.modal-body{flex:1 1 auto; min-height:0; overflow-y:auto;}
+.modal, .modal-body, .swal2-popup, .swal2-html-container, .swal2-container{scrollbar-width:none; -ms-overflow-style:none;}
+.modal::-webkit-scrollbar, .modal-body::-webkit-scrollbar, .swal2-popup::-webkit-scrollbar,
+.swal2-html-container::-webkit-scrollbar, .swal2-container::-webkit-scrollbar{display:none; width:0; height:0;}
+
+/* Popups de SweetAlert2 con formulario (ausencias, felicitaciones) */
+.swal2-popup.swal-form{padding:20px 22px 18px;}
+.swal2-popup.swal-form .swal2-title{font-size:20px; padding:4px 0 0;}
+.swal2-popup.swal-form .swal2-html-container{margin:14px 0 0; overflow:visible;}
+.swal2-popup.swal-form .field{margin-bottom:12px;}
+.swal2-popup.swal-form .field-group-2{gap:0 16px;}
+.swal2-popup.swal-form .field-group-2 .field{margin-bottom:12px;}
+.swal2-popup.swal-form textarea{min-height:58px;}
+.swal2-popup.swal-form .swal2-actions{margin-top:10px;}
+
+@media (max-width: 640px){
+  .crud-grid{grid-template-columns:1fr;}
+  .crud-grid .checkbox-grid{grid-template-columns:1fr;}
+  .swal2-popup.swal-form .field-group-2{grid-template-columns:1fr;}
+}

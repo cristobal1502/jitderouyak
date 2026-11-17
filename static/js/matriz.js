@@ -137,9 +137,10 @@
   /* ---------- Ausencias (solo Delegado) ---------- */
   ausenciaBtn.addEventListener('click', async () => {
     const res = await Swal.fire({
-      title: 'Registrar ausencia',
-      html: campo('Funcionario *', `<select id="sFun">${opcionesEquipo()}</select>`) +
-        campo('Tipo *', `<select id="sTipo">${opcionesLista(datos.tiposAusencia)}</select>`) +
+      title: 'Registrar ausencia', width: 640, customClass: { popup: 'swal-form' },
+      html: '<div class="field-group-2">' +
+        campo('Funcionario *', `<select id="sFun">${opcionesEquipo()}</select>`) +
+        campo('Tipo *', `<select id="sTipo">${opcionesLista(datos.tiposAusencia)}</select>`) + '</div>' +
         '<div class="field-group-2">' +
         campo('Desde *', `<input type="date" id="sDesde" value="${hoy()}" data-requerido>`) +
         campo('Hasta *', `<input type="date" id="sHasta" value="${hoy()}" data-requerido>`) + '</div>' +
@@ -174,14 +175,15 @@
   /* ---------- Felicitaciones (solo Delegado, con respaldo formal) ---------- */
   felicitacionBtn.addEventListener('click', async () => {
     const res = await Swal.fire({
-      title: 'Registrar felicitación',
-      html: campo('Funcionario felicitado *', `<select id="sFun">${opcionesEquipo()}</select>`) +
+      title: 'Registrar felicitación', width: 640, customClass: { popup: 'swal-form' },
+      html: '<div class="field-group-2">' +
+        campo('Funcionario felicitado *', `<select id="sFun">${opcionesEquipo()}</select>`) +
+        campo('Fecha *', `<input type="date" id="sFecha" value="${hoy()}" max="${hoy()}">`) + '</div>' +
+        campo('Quién felicita *', '<input type="text" id="sEmisor" maxlength="150" placeholder="Vecino(a), junta de vecinos, institución…" data-validar="nombre" data-requerido>') +
+        campo('Motivo *', '<textarea id="sMotivo" rows="2" placeholder="Qué destacó del funcionario" data-validar="texto:10" data-requerido></textarea>') +
         '<div class="field-group-2">' +
-        campo('Fecha *', `<input type="date" id="sFecha" value="${hoy()}" max="${hoy()}">`) +
-        campo('Quién felicita *', '<input type="text" id="sEmisor" maxlength="150" placeholder="Vecino(a), junta de vecinos, institución…" data-validar="nombre" data-requerido>') + '</div>' +
-        campo('Motivo *', '<textarea id="sMotivo" placeholder="Qué destacó del funcionario" data-validar="texto:10" data-requerido></textarea>') +
         campo('Tipo de respaldo *', `<select id="sResp">${opcionesLista(datos.tiposRespaldo)}</select>`) +
-        campo('Referencia del respaldo *', '<input type="text" id="sRef" maxlength="120" placeholder="Folio, N° de oficio, asunto y fecha del correo…" data-validar="texto:4" data-requerido>') +
+        campo('Referencia del respaldo *', '<input type="text" id="sRef" maxlength="120" placeholder="Folio, N° de oficio, fecha…" data-validar="texto:4" data-requerido>') + '</div>' +
         '<p class="field-hint" style="text-align:left;">No valen mensajes informales por WhatsApp, chat o redes sociales.</p>',
       showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: BTN,
       preConfirm: () => (formularioInvalido() ? false : {

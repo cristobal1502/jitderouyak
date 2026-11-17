@@ -403,7 +403,7 @@ function campoHtml(c, valor, esNuevo){
 
   switch(c.tipo){
     case 'textarea':
-      control = `<textarea id="${id}"${va}>${esc(valor || '')}</textarea>`;
+      control = `<textarea id="${id}" rows="2"${va}>${esc(valor || '')}</textarea>`;
       break;
     case 'estado':
       control = `<select id="${id}">
@@ -444,7 +444,9 @@ function campoHtml(c, valor, esNuevo){
         ? `<input type="text" id="${id}" value="" placeholder="Se genera automáticamente" disabled>`
         : `<input type="text" id="${id}" value="${esc(valor || '')}" autocomplete="off"${va}>`;
   }
-  return `<div class="field"><label for="${id}">${esc(c.label)}${req}</label>${control}</div>`;
+  // Los campos largos (descripciones y listas de casillas) ocupan las dos columnas del modal.
+  const ancho = ['textarea', 'multiref', 'multiopcion'].includes(c.tipo) ? ' ancho-completo' : '';
+  return `<div class="field${ancho}"><label for="${id}">${esc(c.label)}${req}</label>${control}</div>`;
 }
 
 function abrirModal(id){
