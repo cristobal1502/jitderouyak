@@ -32,10 +32,11 @@ from django.views.decorators.http import require_http_methods
 
 from login.utils import enviar_correo_seguro, generar_password_temporal, validar_password
 
+from . import matriz as M
 from . import permisos as P
 from .models import (
-    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, OrganizacionComunitaria, Perfil, Rol,
-    SubAtencion, TipoAtencion,
+    Atencion, Ausencia, CasoSocial, Delegacion, Felicitacion, GestionSocial, ItemMeta,
+    OrganizacionComunitaria, Perfil, Rol, SubAtencion, TipoAtencion,
 )
 
 CORREO_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
@@ -208,11 +209,9 @@ class DelegacionesRecurso(ConCodigo):
         return usos
 
 
-class ItemsRecurso(ConCodigo):
-    slug = 'items'
-    modelo = ItemMeta
+class CatalogoSimple(ConCodigo):
+    """Catálogo con código, nombre, descripción y estado."""
     permiso_escritura = P.PERM_CATALOGOS
-    prefijo = 'ITM'
 
     def serializar(self, o):
         return {'id': o.pk, 'codigo': o.codigo, 'nombre': o.nombre,
@@ -227,7 +226,34 @@ class ItemsRecurso(ConCodigo):
         }
 
 
-class TiposRecurso(ItemsRecurso):
+class ItemsRecurso(CatalogoSimple):
+    slug = 'items'
+    modelo = ItemMeta
+    prefijo = 'ITM'
+
+    def serializar(self, o):
+        return {**super().serializar(o), 'metaMensual': o.meta_mensual}
+
+    def validar(self, datos, instancia, request):
+        valores = super().validar(datos, instancia, request)
+        meta = datos.get('metaMensual')
+        if meta in (None, ''):
+            raise ErrorApi('campo_vacio', 'metaMensual')
+        try:
+            meta = int(meta)
+        except (TypeError, ValueError):
+            raise ErrorApi('numero_invalido', 'metaMensual')
+        if not 1 <= meta <= 500:
+            raise ErrorApi('numero_invalido', 'metaMensual')
+        valores['meta_mensual'] = meta
+        return valores
+
+    def usos(self, o):
+        n = o.atenciones.count()
+        return [f'{n} atención(es)'] if n else []
+
+
+class TiposRecurso(CatalogoSimple):
     slug = 'tipos-atencion'
     modelo = TipoAtencion
     prefijo = 'TAT'
@@ -613,6 +639,9 @@ def serializar_atencion(a):
     return {
         'id': a.pk, 'codigo': a.codigo, 'solicitante': a.solicitante, 'telefono': a.telefono,
         'clasificacion': a.clasificacion,
+        'itemId': a.item_id, 'itemNombre': a.item.nombre if a.item_id else '',
+        'estado': a.estado, 'ejecutadaEl': a.ejecutada_el.isoformat() if a.ejecutada_el else None,
+        'puntaje': a.puntaje, 'topeAlcanzado': a.tope_alcanzado,
         'tipoId': a.tipo_id, 'tipoNombre': a.tipo.nombre,
         'subId': a.subatencion_id, 'subNombre': a.subatencion.nombre,
         'descripcion': a.descripcion,
@@ -623,7 +652,7 @@ def serializar_atencion(a):
 
 
 def atenciones_visibles(user):
-    qs = Atencion.objects.select_related('tipo', 'subatencion', 'delegacion', 'responsable')
+    qs = Atencion.objects.select_related('tipo', 'subatencion', 'delegacion', 'responsable', 'item')
     alcance = P.alcance_de(user)
     if alcance == P.ALCANCE_TODAS:
         return qs
@@ -656,6 +685,7 @@ def opciones_atencion(request):
         'tipos': [{'id': t.pk, 'nombre': t.nombre} for t in TipoAtencion.objects.filter(activo=True)],
         'subatenciones': [{'id': s.pk, 'nombre': s.nombre, 'tipoId': s.tipo_id}
                           for s in SubAtencion.objects.filter(activo=True)],
+        'items': [{'id': i.pk, 'nombre': i.nombre} for i in ItemMeta.objects.filter(activo=True)],
         'delegaciones': [{'id': d.pk, 'nombre': d.nombre} for d in delegaciones],
         'responsables': responsables,
         'fechaMinima': primera_fecha_abierta().isoformat(),
@@ -715,6 +745,14 @@ def _validar_atencion(datos, user):
     if sub.tipo_id != tipo.pk:
         raise ErrorApi('sub_no_corresponde', 'subId')
 
+    item = leer_id(datos, 'itemId', ItemMeta)
+    if not item.activo:
+        raise ErrorApi('referencia_invalida', 'itemId')
+
+    estado = datos.get('estado') or Atencion.EJECUTADA
+    if estado not in dict(Atencion.ESTADOS):
+        raise ErrorApi('referencia_invalida', 'estado')
+
     descripcion = datos.get('descripcion')
     descripcion = descripcion.strip() if isinstance(descripcion, str) else ''
     if len(descripcion) < 10:
@@ -750,6 +788,7 @@ def _validar_atencion(datos, user):
     clasificacion = Atencion.OTRA_GESTION if es_delegado else Atencion.CIUDADANA
 
     return {'solicitante': solicitante, 'telefono': telefono, 'tipo': tipo, 'subatencion': sub,
+            'item': item, 'estado': estado, 'ejecutada_el': fecha if estado == Atencion.EJECUTADA else None,
             'descripcion': descripcion, 'delegacion': delegacion, 'responsable': responsable,
             'fecha': fecha, 'clasificacion': clasificacion}
 
@@ -763,18 +802,55 @@ def atenciones(request):
 
     exigir(request, P.PERM_REGISTRAR)
     valores = _validar_atencion(leer_json(request), request.user)
-    atencion = None
+    atencion = alerta = None
     for _ in range(3):  # reintento por si dos personas toman el mismo correlativo a la vez
         try:
             with transaction.atomic():
-                atencion = Atencion.objects.create(
-                    codigo=siguiente_codigo(Atencion, 'AT'), creado_por=request.user, **valores)
+                atencion = Atencion(codigo=siguiente_codigo(Atencion, 'AT'), creado_por=request.user, **valores)
+                alerta = M.asignar_puntaje(atencion)
+                atencion.save()
             break
         except IntegrityError:
+            atencion = None
             continue
     if atencion is None:
         raise ErrorApi('duplicado', 'codigo')
-    return JsonResponse(serializar_atencion(atencion), status=201)
+    return JsonResponse({**serializar_atencion(atencion), 'alerta': alerta}, status=201)
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['POST'])
+def ejecutar_atencion(request, pk):
+    """Marca como ejecutada una actividad registrada en preparación. Desde ahí puede sumar puntaje."""
+    exigir(request, P.PERM_REGISTRAR)
+    atencion = atenciones_visibles(request.user).filter(pk=pk).first()
+    if atencion is None:
+        raise ErrorApi('no_encontrado', status=404)
+    if atencion.estado == Atencion.EJECUTADA:
+        raise ErrorApi('ya_ejecutada', status=409)
+
+    datos = leer_json(request)
+    hoy = timezone.localdate()
+    try:
+        dia = date.fromisoformat(str(datos.get('fecha') or hoy.isoformat()))
+    except ValueError:
+        raise ErrorApi('fecha_invalida', 'fecha')
+    if dia > hoy:
+        raise ErrorApi('fecha_futura', 'fecha')
+    if dia < atencion.fecha:
+        raise ErrorApi('ejecucion_anterior', 'fecha', atencion.fecha.isoformat())
+    if hoy > limite_ingreso(dia):
+        raise ErrorApi('semana_cerrada', 'fecha', limite_ingreso(dia).isoformat())
+
+    with transaction.atomic():
+        atencion = Atencion.objects.select_for_update().select_related('item', 'responsable').get(pk=pk)
+        atencion.estado = Atencion.EJECUTADA
+        atencion.ejecutada_el = dia
+        alerta = M.asignar_puntaje(atencion)
+        atencion.save(update_fields=['estado', 'ejecutada_el', 'puntaje', 'tope_alcanzado'])
+    atencion = atenciones_visibles(request.user).get(pk=pk)
+    return JsonResponse({**serializar_atencion(atencion), 'alerta': alerta})
 
 
 # ---------------------------------------------------------- búsqueda avanzada
@@ -842,6 +918,18 @@ def filtrar_busqueda(user, params):
     if hasta:
         qs = qs.filter(fecha__lte=hasta)
 
+    item = _leer_pk(params, 'item')
+    if item is not None:
+        if not ItemMeta.objects.filter(pk=item).exists():
+            raise ErrorApi('referencia_invalida', 'item')
+        qs = qs.filter(item_id=item)
+
+    estado = (params.get('estado') or '').strip()
+    if estado:
+        if estado not in dict(Atencion.ESTADOS):
+            raise ErrorApi('referencia_invalida', 'estado')
+        qs = qs.filter(estado=estado)
+
     clasificacion = (params.get('clasificacion') or '').strip()
     if clasificacion:
         if clasificacion not in dict(Atencion.CLASIFICACIONES):
@@ -899,18 +987,22 @@ def opciones_busqueda(request):
                           for s in SubAtencion.objects.order_by('nombre')],
         'anios': sorted(set(fechas) | {timezone.localdate().year}, reverse=True),
         'clasificaciones': [c for c, _ in Atencion.CLASIFICACIONES],
+        'items': [{'id': i.pk, 'nombre': i.nombre} for i in ItemMeta.objects.order_by('nombre')],
+        'estados': [e for e, _ in Atencion.ESTADOS],
         'puedeExportar': P.tiene_permiso(user, P.PERM_EXPORTAR),
     })
 
 
 COLUMNAS_EXPORTAR = ['Código', 'Fecha', 'Funcionario', 'Delegación', 'Tipo de atención',
-                     'Sub atención', 'Solicitante', 'Teléfono', 'Clasificación', 'Descripción']
+                     'Sub atención', 'Solicitante', 'Teléfono', 'Clasificación', 'Ítem / meta', 'Estado',
+                     'Puntaje', 'Descripción']
 
 
 def filas_exportar(qs):
     for a in qs[:BUSQUEDA_MAX_EXPORTAR]:
         yield [a.codigo, a.fecha, P.nombre_visible(a.responsable), a.delegacion.nombre,
-               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.telefono, a.clasificacion, a.descripcion]
+               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.telefono, a.clasificacion,
+               a.item.nombre if a.item_id else '', a.estado, a.puntaje, a.descripcion]
 
 
 @api_login_requerido
@@ -934,7 +1026,7 @@ def exportar_busqueda(request):
         ws.append(fila)
     for celda in ws['B'][1:]:
         celda.number_format = 'DD/MM/YYYY'
-    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 16, 20, 60], start=1):
+    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 16, 20, 24, 14, 9, 60], start=1):
         ws.column_dimensions[get_column_letter(i)].width = ancho
     ws.freeze_panes = 'A2'
     ws.auto_filter.ref = ws.dimensions
@@ -1180,3 +1272,217 @@ def gestiones_caso(request, pk):
         except IntegrityError:
             raise ErrorApi('conflicto', 'caso', status=409)
     return JsonResponse(serializar_caso(_casos_base().get(pk=pk)), status=201)
+
+
+# ------------------------------------------------------------------ matriz SGR
+def puede_gestionar_equipo(user):
+    """Ausencias y felicitaciones: exclusivo del Delegado (y del superusuario)."""
+    return user.is_superuser or P.es_delegado(user)
+
+
+def equipo_de(delegacion):
+    """Funcionarios activos de la delegación que registran actividades. Se excluyen los
+    administradores del sistema (rol con «Gestionar usuarios»): no son parte del equipo territorial."""
+    candidatos = (User.objects.filter(is_active=True, perfil__delegaciones=delegacion)
+                  .select_related('perfil__rol').distinct().order_by('first_name', 'last_name', 'username'))
+    ids = [u.pk for u in candidatos
+           if P.PERM_REGISTRAR in (u.perfil.rol.permisos or []) and P.PERM_USUARIOS not in (u.perfil.rol.permisos or [])]
+    return candidatos.filter(pk__in=ids)
+
+
+def _leer_mes(texto):
+    hoy = timezone.localdate()
+    if not texto:
+        return hoy.year, hoy.month
+    m = re.fullmatch(r'(\d{4})-(\d{2})', texto.strip())
+    if not m or not 1 <= int(m.group(2)) <= 12:
+        raise ErrorApi('fecha_invalida', 'mes')
+    return int(m.group(1)), int(m.group(2))
+
+
+def _delegacion_de_equipo(user, pk, exigir_delegado=False):
+    delegacion = P.delegaciones_de(user).filter(pk=pk).first()
+    if delegacion is None:
+        raise ErrorApi('prohibido', 'delegacionId', status=403)
+    if exigir_delegado and not puede_gestionar_equipo(user):
+        raise ErrorApi('solo_delegado', status=403)
+    return delegacion
+
+
+def serializar_ausencia(a):
+    return {'id': a.pk, 'funcionarioId': a.funcionario_id, 'funcionario': P.nombre_visible(a.funcionario),
+            'tipo': a.tipo, 'desde': a.desde.isoformat(), 'hasta': a.hasta.isoformat(),
+            'observacion': a.observacion}
+
+
+def serializar_felicitacion(f):
+    return {'id': f.pk, 'funcionarioId': f.funcionario_id, 'funcionario': P.nombre_visible(f.funcionario),
+            'delegacionId': f.delegacion_id, 'fecha': f.fecha.isoformat(), 'emisor': f.emisor,
+            'motivo': f.motivo, 'respaldoTipo': f.respaldo_tipo, 'respaldoReferencia': f.respaldo_referencia,
+            'registradaPor': P.nombre_visible(f.registrada_por) if f.registrada_por else ''}
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['GET'])
+def matriz_equipo(request):
+    """Avance de la matriz SGR del equipo de una delegación en un mes."""
+    user = request.user
+    delegaciones = list(P.delegaciones_de(user).filter(activo=True).order_by('nombre'))
+    if not delegaciones:
+        raise ErrorApi('sin_delegacion', status=403)
+    pk = _leer_pk(request.GET, 'delegacion')
+    delegacion = _delegacion_de_equipo(user, pk) if pk is not None else delegaciones[0]
+    anio, mes = _leer_mes(request.GET.get('mes'))
+    desde, hasta = M.rango_mes(anio, mes)
+    hoy = timezone.localdate()
+
+    items = list(ItemMeta.objects.filter(activo=True))
+    miembros = list(equipo_de(delegacion))
+    ausencias = list(Ausencia.objects.filter(funcionario__in=miembros, desde__lte=hasta, hasta__gte=desde)
+                     .select_related('funcionario'))
+    felicitaciones = list(Felicitacion.objects.filter(delegacion=delegacion, fecha__range=(desde, hasta))
+                          .select_related('funcionario', 'registrada_por'))
+
+    equipo = []
+    por_item = {i.pk: {'itemId': i.pk, 'item': i.nombre, 'puntos': 0, 'meta': 0.0} for i in items}
+    for u in miembros:
+        propias = [a for a in ausencias if a.funcionario_id == u.pk]
+        factor, filas = M.resumen_funcionario(u, anio, mes, items, propias)
+        pts = sum(f['puntos'] for f in filas)
+        meta = sum(f['meta'] for f in filas)
+        valor = M.cumplimiento(pts, meta) if filas else 0
+        for f in filas:
+            por_item[f['itemId']]['puntos'] += f['puntos']
+            por_item[f['itemId']]['meta'] += f['meta']
+        equipo.append({
+            'id': u.pk, 'nombre': P.nombre_visible(u), 'cargo': u.perfil.rol.nombre,
+            'disponibilidad': round(factor * 100),
+            'diasAusente': M.dias_ausente(u, desde, hasta, propias),
+            'ausenteHoy': any(a.desde <= hoy <= a.hasta for a in propias),
+            'puntos': pts, 'meta': round(meta, 1), 'cumplimiento': round(valor * 100),
+            'semaforo': M.semaforo(valor), 'items': filas,
+            'felicitaciones': sum(1 for f in felicitaciones if f.funcionario_id == u.pk),
+        })
+
+    items_equipo = []
+    for fila in por_item.values():
+        valor = M.cumplimiento(fila['puntos'], fila['meta'])
+        items_equipo.append({**fila, 'meta': round(fila['meta'], 1), 'cumplimiento': round(valor * 100),
+                             'semaforo': M.semaforo(valor)})
+
+    total_pts = sum(f['puntos'] for f in items_equipo)
+    total_meta = sum(f['meta'] for f in items_equipo)
+    avance = M.cumplimiento(total_pts, total_meta) if items_equipo else 0
+    pcts = [m['cumplimiento'] for m in equipo]
+    brecha = (max(pcts) - min(pcts)) if pcts else 0
+    return JsonResponse({
+        'delegacion': {'id': delegacion.pk, 'nombre': delegacion.nombre},
+        'delegaciones': [{'id': d.pk, 'nombre': d.nombre} for d in delegaciones],
+        'mes': f'{anio:04d}-{mes:02d}',
+        'grupo': {
+            'puntos': total_pts, 'meta': round(total_meta, 1), 'cumplimiento': round(avance * 100),
+            'semaforo': M.semaforo(avance), 'brecha': brecha,
+            'equilibrado': bool(pcts) and brecha <= 30 and min(pcts) >= M.AMARILLO * 100,
+            'conteo': {c: sum(1 for m in equipo if m['semaforo'] == c) for c in ('verde', 'amarillo', 'rojo')},
+        },
+        'items': items_equipo,
+        'equipo': equipo,
+        'ausencias': [serializar_ausencia(a) for a in ausencias],
+        'felicitaciones': [serializar_felicitacion(f) for f in felicitaciones],
+        'puedeGestionar': puede_gestionar_equipo(user),
+        'tiposAusencia': Ausencia.TIPOS,
+        'tiposRespaldo': Felicitacion.RESPALDOS,
+        'tope': round(M.TOPE * 100),
+    })
+
+
+def _leer_fecha_campo(datos, key):
+    valor = datos.get(key)
+    if not valor:
+        raise ErrorApi('campo_vacio', key)
+    try:
+        return date.fromisoformat(str(valor))
+    except ValueError:
+        raise ErrorApi('fecha_invalida', key)
+
+
+def _miembro(datos, delegacion):
+    funcionario = leer_id(datos, 'funcionarioId', User)
+    if not equipo_de(delegacion).filter(pk=funcionario.pk).exists():
+        raise ErrorApi('referencia_invalida', 'funcionarioId')
+    return funcionario
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['POST'])
+def ausencias(request):
+    datos = leer_json(request)
+    delegacion = _delegacion_de_equipo(request.user, leer_id(datos, 'delegacionId', Delegacion).pk,
+                                       exigir_delegado=True)
+    funcionario = _miembro(datos, delegacion)
+    tipo = datos.get('tipo')
+    if not tipo:
+        raise ErrorApi('campo_vacio', 'tipo')
+    if tipo not in Ausencia.TIPOS:
+        raise ErrorApi('referencia_invalida', 'tipo')
+    desde = _leer_fecha_campo(datos, 'desde')
+    hasta = _leer_fecha_campo(datos, 'hasta')
+    if hasta < desde:
+        raise ErrorApi('rango_invalido', 'hasta')
+    if (hasta - desde).days > 366:
+        raise ErrorApi('rango_invalido', 'hasta')
+    if Ausencia.objects.filter(funcionario=funcionario, desde__lte=hasta, hasta__gte=desde).exists():
+        raise ErrorApi('ausencia_traslapada', 'desde')
+    observacion = (datos.get('observacion') or '').strip()
+    if len(observacion) > 200:
+        raise ErrorApi('texto_largo', 'observacion', '200')
+    a = Ausencia.objects.create(funcionario=funcionario, tipo=tipo, desde=desde, hasta=hasta,
+                                observacion=observacion, registrada_por=request.user)
+    return JsonResponse(serializar_ausencia(a), status=201)
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['DELETE'])
+def ausencia_detalle(request, pk):
+    if not puede_gestionar_equipo(request.user):
+        raise ErrorApi('solo_delegado', status=403)
+    a = Ausencia.objects.filter(pk=pk, funcionario__perfil__delegaciones__in=P.delegaciones_de(request.user)).first()
+    if a is None:
+        raise ErrorApi('no_encontrado', status=404)
+    a.delete()
+    return JsonResponse({'ok': True})
+
+
+RESPALDO_INFORMAL_RE = re.compile(r'whats|wsp|wasap|telegram|chat|instagram|facebook|messenger|sms', re.I)
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['POST'])
+def felicitaciones(request):
+    datos = leer_json(request)
+    delegacion = _delegacion_de_equipo(request.user, leer_id(datos, 'delegacionId', Delegacion).pk,
+                                       exigir_delegado=True)
+    funcionario = _miembro(datos, delegacion)
+    fecha = _leer_fecha_campo(datos, 'fecha')
+    if fecha > timezone.localdate():
+        raise ErrorApi('fecha_futura', 'fecha')
+    emisor = leer_texto(datos, 'emisor', 150)
+    motivo = leer_texto(datos, 'motivo')
+    respaldo_tipo = datos.get('respaldoTipo')
+    if not respaldo_tipo:
+        raise ErrorApi('campo_vacio', 'respaldoTipo')
+    if respaldo_tipo not in Felicitacion.RESPALDOS:
+        raise ErrorApi('respaldo_informal', 'respaldoTipo')
+    referencia = leer_texto(datos, 'respaldoReferencia', 120)
+    if len(referencia) < 4:
+        raise ErrorApi('campo_vacio', 'respaldoReferencia')
+    if RESPALDO_INFORMAL_RE.search(referencia):
+        raise ErrorApi('respaldo_informal', 'respaldoReferencia')
+    f = Felicitacion.objects.create(funcionario=funcionario, delegacion=delegacion, fecha=fecha, emisor=emisor,
+                                    motivo=motivo, respaldo_tipo=respaldo_tipo, respaldo_referencia=referencia,
+                                    registrada_por=request.user)
+    return JsonResponse(serializar_felicitacion(f), status=201)

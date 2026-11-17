@@ -60,6 +60,7 @@ class ItemMeta(models.Model):
     codigo = models.CharField(max_length=20, unique=True)
     nombre = models.CharField(max_length=120)
     descripcion = models.TextField()
+    meta_mensual = models.PositiveSmallIntegerField(default=10)  # puntos esperados por funcionario al mes
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -106,11 +107,19 @@ class Atencion(models.Model):
     OTRA_GESTION = 'Otra gestión'   # el solicitante es el propio Delegado: no cuenta como atención ciudadana
     CLASIFICACIONES = [(CIUDADANA, CIUDADANA), (OTRA_GESTION, OTRA_GESTION)]
     MAX_POR_DIA = 7                 # actividades por funcionario en un mismo día
+    PREPARACION = 'Preparación'     # tareas previas (correos, coordinar, invitar): se anotan, no suman
+    EJECUTADA = 'Ejecutada'         # acción realizada: solo estas suman puntaje
+    ESTADOS = [(PREPARACION, PREPARACION), (EJECUTADA, EJECUTADA)]
 
     codigo = models.CharField(max_length=20, unique=True)
     solicitante = models.CharField(max_length=150)
     telefono = models.CharField(max_length=30, blank=True, default='')  # teléfono del vecino
     clasificacion = models.CharField(max_length=30, choices=CLASIFICACIONES, default=CIUDADANA)
+    item = models.ForeignKey(ItemMeta, on_delete=models.PROTECT, related_name='atenciones', null=True, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default=EJECUTADA)
+    ejecutada_el = models.DateField(null=True, blank=True)  # fecha en que se realizó (define el mes del puntaje)
+    puntaje = models.PositiveSmallIntegerField(default=0)    # 1 si sumó a la matriz, 0 si no
+    tope_alcanzado = models.BooleanField(default=False)      # no sumó porque el ítem ya estaba en 120%
     tipo = models.ForeignKey(TipoAtencion, on_delete=models.PROTECT, related_name='atenciones')
     subatencion = models.ForeignKey(SubAtencion, on_delete=models.PROTECT, related_name='atenciones')
     descripcion = models.TextField()
@@ -213,3 +222,51 @@ class OrganizacionComunitaria(models.Model):
 
     def __str__(self):
         return f'{self.codigo} · {self.nombre}'
+
+
+class Ausencia(models.Model):
+    """Vacaciones, licencias o días libres de un funcionario. Las ingresa el Delegado y
+    rebajan la meta del mes en proporción a los días hábiles ausentes."""
+    TIPOS = ['Vacaciones', 'Licencia médica', 'Día libre / administrativo']
+
+    funcionario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ausencias')
+    tipo = models.CharField(max_length=40, choices=[(t, t) for t in TIPOS])
+    desde = models.DateField()
+    hasta = models.DateField()
+    observacion = models.CharField(max_length=200, blank=True)
+    registrada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       related_name='ausencias_registradas')
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-desde', '-id']
+        constraints = [models.CheckConstraint(condition=models.Q(hasta__gte=models.F('desde')),
+                                              name='ausencia_rango_valido')]
+
+    def __str__(self):
+        return f'{self.funcionario} · {self.tipo} {self.desde}–{self.hasta}'
+
+
+class Felicitacion(models.Model):
+    """Felicitación a un funcionario. Solo la ingresa el Delegado y exige un respaldo formal."""
+    RESPALDOS = ['Carta firmada', 'Correo electrónico formal', 'Oficio o memorándum',
+                 'Libro de reclamos y felicitaciones']
+
+    funcionario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='felicitaciones')
+    delegacion = models.ForeignKey(Delegacion, on_delete=models.PROTECT, related_name='felicitaciones')
+    fecha = models.DateField()
+    emisor = models.CharField(max_length=150)          # quién felicita (vecino, junta de vecinos, institución)
+    motivo = models.TextField()
+    respaldo_tipo = models.CharField(max_length=40, choices=[(r, r) for r in RESPALDOS])
+    respaldo_referencia = models.CharField(max_length=120)  # folio, N° de oficio, asunto y fecha del correo...
+    registrada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       related_name='felicitaciones_registradas')
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha', '-id']
+        verbose_name = 'felicitación'
+        verbose_name_plural = 'felicitaciones'
+
+    def __str__(self):
+        return f'{self.funcionario} · {self.fecha}'

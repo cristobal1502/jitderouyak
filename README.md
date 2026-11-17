@@ -14,6 +14,9 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
   - Si el solicitante es el propio Delegado, se guarda como «Otra gestión» y no como atención ciudadana (se marca a mano o se detecta por el nombre).
   - Máximo 7 actividades por funcionario en un mismo día.
   - Cierre semanal: lo de una semana se puede ingresar hasta el lunes siguiente; desde el martes queda cerrada.
+  - Cada actividad lleva un ítem de la matriz y un estado: «En preparación» (correos, coordinar, invitar: no suma) o «Ejecutada» (suma 1 punto). Las de preparación se marcan después como ejecutadas.
+  - Tope de 120%: cuando un ítem llega al 120% de la meta del mes deja de sumar y se avisa cuáles ítems están más bajos.
+- **Matriz SGR (vista de equipo)** — avance grupal de la delegación por ítem y por funcionario, con semáforo (≥100% verde, 70–99% amarillo, <70% rojo) y medida de equilibrio. La meta mensual de cada ítem se define en Ítems y metas y se rebaja en proporción a los días hábiles de ausencia. Solo el Delegado registra ausencias (vacaciones, licencias, días libres) y felicitaciones, estas últimas con respaldo formal obligatorio.
 - **Organizaciones** — registro de juntas de vecinos y organizaciones funcionales (subfamilias: Adulto Mayor, Deportivas, Centros de Madres/Culturales/Juveniles, Comités), con estado «Verificado / Pendiente de revisión». Todos lo consultan; lo editan quienes tienen «Administrar catálogos».
 - **Búsqueda avanzada** — filtros sobre las atenciones (delegación, período, funcionario, tipo, sub atención, fechas y palabras clave), paginación en el servidor y exportación a Excel (.xlsx) y PDF (vista imprimible). Respeta el alcance del rol; exportar requiere el permiso «Exportar informes».
 - **Administración (CRUD)** — Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención y Sub atenciones.

@@ -68,15 +68,16 @@ const ENTIDADES = {
 
   'items': {
     titulo: 'Ítems y metas',
-    subtitulo: 'Código, nombre, descripción y estado (mantenedor de Ítems del proyecto)',
+    subtitulo: 'Ítems de la matriz SGR y su meta mensual por funcionario (1 punto por actividad ejecutada)',
     api: 'items', nuevoLabel: 'Nuevo ítem', singular: 'ítem',
     campos: [
       { key: 'codigo', label: 'Código', tipo: 'texto', auto: true },
       { key: 'nombre', label: 'Nombre', tipo: 'texto', requerido: true },
       { key: 'descripcion', label: 'Descripción', tipo: 'textarea', requerido: true },
+      { key: 'metaMensual', label: 'Meta mensual (puntos por funcionario)', tipo: 'numero', min: 1, max: 500, requerido: true },
       { key: 'estado', label: 'Estado', tipo: 'estado' }
     ],
-    columnas: ['codigo', 'nombre', 'descripcion', 'estado']
+    columnas: ['codigo', 'nombre', 'descripcion', 'metaMensual', 'estado']
   },
 
   'tipos-atencion': {
@@ -179,6 +180,10 @@ function mostrarAlerta(caso, ctx = {}){
       return Swal.fire({ icon: 'error', title: 'Falta una selección',
         text: `Selecciona al menos una opción en «${etiqueta}».`, confirmButtonColor: BTN });
 
+    case 'numero_invalido':
+      return Swal.fire({ icon: 'error', title: 'Número inválido',
+        text: `«${etiqueta}» debe ser un número entero entre ${ctx.campo.min ?? 1} y ${ctx.campo.max ?? 500}.`, confirmButtonColor: BTN });
+
     case 'telefono_invalido':
       return Swal.fire({ icon: 'error', title: 'Teléfono inválido',
         text: 'Usa solo números, espacios y los signos + ( ) -.', confirmButtonColor: BTN });
@@ -260,6 +265,7 @@ function manejarError(err){
     case 'sin_seleccion':
     case 'correo_invalido':
     case 'telefono_invalido':
+    case 'numero_invalido':
     case 'duplicado':
     case 'referencia_invalida':
     case 'texto_largo':
@@ -419,6 +425,9 @@ function campoHtml(c, valor, esNuevo){
     case 'correo':
       control = `<input type="email" id="${id}" value="${esc(valor || '')}" autocomplete="off">`;
       break;
+    case 'numero':
+      control = `<input type="number" id="${id}" value="${esc(valor ?? '')}" min="${c.min ?? ''}" max="${c.max ?? ''}" step="1">`;
+      break;
     default:
       // El código se genera en el servidor al crear (DEL-001, ITM-001, ...).
       control = (c.auto && esNuevo)
@@ -496,6 +505,9 @@ function validar(datos){
     const requerido = c.requerido || (c.activoSi && datos[c.activoSi.key] === c.activoSi.valor);
     if(requerido && vacio) return { caso: esLista ? 'sin_seleccion' : 'campo_vacio', campo: c };
     if(c.tipo === 'correo' && v && !correoRe.test(v)) return { caso: 'correo_invalido', campo: c };
+    if(c.tipo === 'numero' && v !== '' && (!/^\d+$/.test(v) || Number(v) < (c.min ?? 0) || Number(v) > (c.max ?? Infinity))){
+      return { caso: 'numero_invalido', campo: c };
+    }
   }
   return null;
 }

@@ -1387,3 +1387,131 @@ button{font-family:inherit;}
 }
 
 .form-actions-2{gap:10px;}
+
+/* ---------- Matriz SGR: estado de la actividad ---------- */
+.segmented{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.segmented label{
+  flex:1;
+  min-width:160px;
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius);
+  padding:9px 11px;
+  font-size:13px;
+  font-weight:600;
+  color:var(--ink);
+  cursor:pointer;
+  background:var(--surface);
+  margin:0;
+}
+.segmented label small{display:block; font-weight:400; color:var(--ink-faint); font-size:11.5px;}
+.segmented label:has(input:checked){border-color:var(--red-primary); box-shadow:0 0 0 3px var(--red-soft);}
+.segmented input{margin-top:2px; accent-color:var(--red-primary);}
+
+/* ---------- Matriz SGR: semáforo y vista de equipo ---------- */
+:root{
+  --sem-verde:#2E7D4F;
+  --sem-verde-soft:#E3F1E8;
+  --sem-amarillo:#A86B00;
+  --sem-amarillo-soft:#FBF0D9;
+  --sem-rojo:#B3261E;
+  --sem-rojo-soft:#FBE4E2;
+}
+.sem{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:3px 9px;
+  border-radius:20px;
+  font-size:12px;
+  font-weight:700;
+  font-family:var(--font-mono);
+  white-space:nowrap;
+}
+.sem::before{content:""; width:7px; height:7px; border-radius:50%; background:currentColor;}
+.sem.verde{background:var(--sem-verde-soft); color:var(--sem-verde);}
+.sem.amarillo{background:var(--sem-amarillo-soft); color:var(--sem-amarillo);}
+.sem.rojo{background:var(--sem-rojo-soft); color:var(--sem-rojo);}
+
+.matriz-toolbar{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  margin-bottom:18px;
+}
+.matriz-toolbar .filter-field{min-width:200px;}
+.matriz-toolbar .filter-field input[type="month"]{
+  width:100%;
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius);
+  padding:9px 11px;
+  font-family:inherit;
+  font-size:13px;
+  color:var(--ink);
+  background:var(--surface);
+}
+.matriz-toolbar .spacer{flex:1;}
+.matriz-toolbar .acciones{display:flex; gap:10px; flex-wrap:wrap;}
+.matriz-toolbar [hidden]{display:none;}
+
+/* barra con escala hasta 120% y marca en el 100% */
+.meta-track{
+  position:relative;
+  height:9px;
+  background:var(--stripe);
+  border-radius:5px;
+  overflow:visible;
+}
+.meta-fill{height:100%; border-radius:5px; max-width:100%;}
+.meta-fill.verde{background:var(--sem-verde);}
+.meta-fill.amarillo{background:var(--sem-amarillo);}
+.meta-fill.rojo{background:var(--sem-rojo);}
+.meta-track::after{
+  content:"";
+  position:absolute;
+  left:83.333%;
+  top:-3px;
+  bottom:-3px;
+  width:2px;
+  background:var(--ink-soft);
+  opacity:.55;
+}
+.meta-escala{display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink-faint); margin-top:4px; font-family:var(--font-mono);}
+
+.matriz-tabla td, .matriz-tabla th{vertical-align:middle;}
+.matriz-tabla .celda-item{font-family:var(--font-mono); font-size:12px; white-space:nowrap;}
+.matriz-tabla .celda-item small{display:block; color:var(--ink-faint); font-size:10.5px;}
+.matriz-tabla .funcionario small{display:block; color:var(--ink-faint); font-size:11.5px;}
+.chip-ausente{
+  display:inline-block;
+  margin-top:3px;
+  padding:1px 7px;
+  border-radius:999px;
+  background:var(--sem-amarillo-soft);
+  color:var(--sem-amarillo);
+  font-size:11px;
+  font-weight:700;
+}
+.dos-columnas{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:22px;
+}
+@media (max-width: 880px){
+  .dos-columnas{grid-template-columns:1fr;}
+}
+.lista-simple{list-style:none; margin:0; padding:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);}
+.lista-simple li{padding:12px 16px; border-bottom:1px solid var(--border); font-size:13px;}
+.lista-simple li:last-child{border-bottom:none;}
+.lista-simple .linea1{display:flex; justify-content:space-between; gap:10px; font-weight:600;}
+.lista-simple .linea2{color:var(--ink-soft); margin-top:3px;}
+.lista-simple .linea3{color:var(--ink-faint); font-size:11.5px; margin-top:3px; font-family:var(--font-mono);}
+.lista-simple .vacio{color:var(--ink-faint);}
+.nota-equilibrio{font-size:12.5px; color:var(--ink-soft); margin-top:6px;}

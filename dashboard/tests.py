@@ -11,7 +11,10 @@ from django.utils import timezone
 from unittest import mock
 
 from .api import limite_ingreso, primera_fecha_abierta
-from .models import Atencion, Delegacion, OrganizacionComunitaria, Rol, SubAtencion, TipoAtencion
+from . import matriz as M
+from .models import (
+    Atencion, Ausencia, Delegacion, Felicitacion, ItemMeta, OrganizacionComunitaria, Rol, SubAtencion, TipoAtencion,
+)
 
 
 # Hasher rápido solo para las pruebas (PBKDF2 hace que cada login tarde ~0,1 s)
@@ -251,6 +254,7 @@ class Atenciones(BaseApi):
     def datos(self, **cambios):
         tipo = TipoAtencion.objects.get(codigo='TAT-001')
         d = {'solicitante': 'Pedro Pablo', 'telefono': '+56 9 1234 5678', 'tipoId': tipo.pk,
+             'itemId': ItemMeta.objects.get(codigo='ITM-001').pk,
              'subId': SubAtencion.objects.get(codigo='SUB-001').pk,
              'descripcion': 'Descripción suficientemente larga',
              'delegacionId': Delegacion.objects.get(codigo='DEL-001').pk,
@@ -748,3 +752,183 @@ class Organizaciones(BaseApi):
         d = Delegacion.objects.get(codigo='DEL-900')
         r = self.api('delete', f'delegaciones/{d.pk}/')
         self.assertEqual((r.status_code, self.json(r)['error']), (409, 'en_uso'))
+
+
+
+class PuntajeMatriz(BaseApi):
+    datos = Atenciones.datos
+
+    def crear(self, **cambios):
+        r = self.api('post', 'atenciones/', self.datos(**cambios))
+        self.assertEqual(r.status_code, 201, r.content)
+        return self.json(r)
+
+    def test_item_obligatorio(self):
+        self.entrar('juan.perez')
+        r = self.json(self.api('post', 'atenciones/', self.datos(itemId='')))
+        self.assertEqual((r['error'], r['campo']), ('campo_vacio', 'itemId'))
+        inactivo = ItemMeta.objects.get(codigo='ITM-004').pk
+        self.assertEqual(self.json(self.api('post', 'atenciones/', self.datos(itemId=inactivo)))['error'],
+                         'referencia_invalida')
+
+    def test_ejecutada_suma_preparacion_no(self):
+        self.entrar('juan.perez')
+        a = self.crear()
+        self.assertEqual((a['estado'], a['puntaje'], a['alerta']), ('Ejecutada', 1, None))
+        p = self.crear(estado='Preparación')
+        self.assertEqual((p['puntaje'], p['ejecutadaEl']), (0, None))
+        # al marcarla como ejecutada empieza a sumar
+        r = self.api('post', f"atenciones/{p['id']}/ejecutar/", {})
+        self.assertEqual((r.status_code, self.json(r)['puntaje'], self.json(r)['estado']), (200, 1, 'Ejecutada'))
+        self.assertEqual(self.api('post', f"atenciones/{p['id']}/ejecutar/", {}).status_code, 409)
+
+    def test_ejecucion_no_anterior_al_registro(self):
+        self.entrar('juan.perez')
+        p = self.crear(estado='Preparación')
+        ayer = (timezone.localdate() - timedelta(days=1)).isoformat()
+        r = self.json(self.api('post', f"atenciones/{p['id']}/ejecutar/", {'fecha': ayer}))
+        self.assertEqual(r['error'], 'ejecucion_anterior')
+
+    def test_otra_gestion_no_suma(self):
+        self.entrar('juan.perez')
+        self.assertEqual(self.crear(solicitanteEsDelegado=True)['puntaje'], 0)
+
+    def test_ejecutar_solo_lo_visible(self):
+        self.entrar('carla.tapia')
+        p = self.crear(responsableId=User.objects.get(username='carla.tapia').pk, estado='Preparación')
+        self.entrar('juan.perez')
+        self.assertEqual(self.api('post', f"atenciones/{p['id']}/ejecutar/", {}).status_code, 404)
+
+    def test_tope_120_y_alerta(self):
+        item = ItemMeta.objects.get(codigo='ITM-001')
+        item.meta_mensual = 2  # tope = 2,4 → 2 puntos
+        item.save()
+        hoy = timezone.localdate()
+        Ausencia.objects.filter(funcionario__username='juan.perez').delete()
+        self.entrar('juan.perez')
+        # puntos de AT-002 pueden existir en otro ítem; los de ITM-001 de este mes parten en 0
+        base = M.puntos(User.objects.get(username='juan.perez'), item, hoy.year, hoy.month)
+        for _ in range(max(0, 2 - base)):
+            self.assertEqual(self.crear()['puntaje'], 1)
+        r = self.crear()
+        self.assertEqual((r['puntaje'], r['topeAlcanzado']), (0, True))
+        self.assertEqual(r['alerta']['item'], 'Atención social')
+        self.assertGreaterEqual(r['alerta']['cumplimiento'], 100)
+        self.assertIn('Operativos en terreno', [x['item'] for x in r['alerta']['sugeridos']])
+        # otro ítem sigue sumando
+        otro = ItemMeta.objects.get(codigo='ITM-002').pk
+        self.assertEqual(self.crear(itemId=otro)['puntaje'], 1)
+
+    def test_meta_se_ajusta_por_ausencias(self):
+        juan = User.objects.get(username='juan.perez')
+        # octubre 2026: 22 días hábiles; la demo trae vacaciones del 19 al 23 (5 días hábiles)
+        self.assertEqual(M.dias_habiles(date(2026, 10, 1), date(2026, 10, 31)), 22)
+        self.assertAlmostEqual(M.factor_disponibilidad(juan, 2026, 10), 17 / 22)
+        _, filas = M.resumen_funcionario(juan, 2026, 10)
+        operativos = next(f for f in filas if f['item'] == 'Operativos en terreno')
+        self.assertEqual((operativos['puntos'], operativos['meta']), (1, round(10 * 17 / 22, 1)))
+        # una ausencia traslapada no descuenta dos veces
+        Ausencia.objects.create(funcionario=juan, tipo='Licencia médica', desde=date(2026, 10, 22),
+                                hasta=date(2026, 10, 27))
+        self.assertEqual(M.dias_ausente(juan, date(2026, 10, 1), date(2026, 10, 31)), 7)
+
+    def test_meta_mensual_en_items(self):
+        self.entrar_admin()
+        item = ItemMeta.objects.get(codigo='ITM-001')
+        base = {'codigo': item.codigo, 'nombre': item.nombre, 'descripcion': item.descripcion, 'estado': 'Activo'}
+        for meta, esperado in [('', 'campo_vacio'), ('cero', 'numero_invalido'), (0, 'numero_invalido')]:
+            r = self.json(self.api('put', f'items/{item.pk}/', {**base, 'metaMensual': meta}))
+            self.assertEqual(r['error'], esperado, meta)
+        r = self.api('put', f'items/{item.pk}/', {**base, 'metaMensual': 15})
+        self.assertEqual((r.status_code, self.json(r)['metaMensual']), (200, 15))
+        # los tipos de atención no tienen meta
+        self.assertNotIn('metaMensual', self.json(self.api('get', 'tipos-atencion/'))[0])
+
+
+class VistaEquipo(BaseApi):
+    def test_matriz_del_equipo(self):
+        self.entrar_admin()
+        d1 = Delegacion.objects.get(codigo='DEL-001').pk
+        r = self.json(self.api('get', f'matriz/?delegacion={d1}&mes=2026-10'))
+        nombres = [m['nombre'] for m in r['equipo']]
+        self.assertIn('Juan Pérez', nombres)
+        self.assertNotIn('Ana Núñez', nombres)  # inactiva
+        self.assertNotIn('Pedro Soto', nombres)  # Administrador del sistema, no equipo territorial
+        juan = next(m for m in r['equipo'] if m['nombre'] == 'Juan Pérez')
+        self.assertEqual((juan['puntos'], juan['diasAusente'], juan['disponibilidad']), (1, 5, 77))
+        self.assertEqual(r['grupo']['puntos'], 2)  # AT-001 (Carla) + AT-002 (Juan)
+        self.assertEqual(sum(r['grupo']['conteo'].values()), len(r['equipo']))
+        self.assertFalse(r['puedeGestionar'])  # el Administrador no es Delegado
+        self.assertEqual(len(r['ausencias']), 1)
+        self.entrar('maria.rojas')
+        r = self.json(self.api('get', 'matriz/?mes=2026-10'))
+        self.assertTrue(r['puedeGestionar'])
+        self.assertEqual(len(r['felicitaciones']), 1)
+
+    def test_alcance_y_validaciones(self):
+        self.entrar('juan.perez')
+        r = self.json(self.api('get', 'matriz/'))
+        self.assertEqual(r['delegacion']['nombre'], 'Coquimbo Centro')
+        self.assertFalse(r['puedeGestionar'])
+        d2 = Delegacion.objects.get(codigo='DEL-002').pk
+        self.assertEqual(self.api('get', f'matriz/?delegacion={d2}').status_code, 403)
+        self.assertEqual(self.json(self.api('get', 'matriz/?mes=2026-13'))['error'], 'fecha_invalida')
+
+
+class AusenciasYFelicitaciones(BaseApi):
+    def ausencia(self, **cambios):
+        d = {'delegacionId': Delegacion.objects.get(codigo='DEL-002').pk,
+             'funcionarioId': User.objects.get(username='laura.mena').pk,
+             'tipo': 'Licencia médica', 'desde': '2026-11-02', 'hasta': '2026-11-04'}
+        d.update(cambios)
+        return d
+
+    def felicitacion(self, **cambios):
+        d = {'delegacionId': Delegacion.objects.get(codigo='DEL-002').pk,
+             'funcionarioId': User.objects.get(username='laura.mena').pk,
+             'fecha': timezone.localdate().isoformat(), 'emisor': 'Vecina del sector',
+             'motivo': 'Excelente atención en terreno', 'respaldoTipo': 'Correo electrónico formal',
+             'respaldoReferencia': 'Correo del 10/11 a delegacion@muni.cl'}
+        d.update(cambios)
+        return d
+
+    def test_solo_el_delegado(self):
+        self.entrar('juan.perez')  # Funcionario
+        r = self.api('post', 'ausencias/', self.ausencia(delegacionId=Delegacion.objects.get(codigo='DEL-001').pk,
+                                                         funcionarioId=User.objects.get(username='juan.perez').pk))
+        self.assertEqual((r.status_code, self.json(r)['error']), (403, 'solo_delegado'))
+        self.entrar('laura.mena')  # Supervisor: tampoco
+        self.assertEqual(self.json(self.api('post', 'felicitaciones/', self.felicitacion()))['error'], 'solo_delegado')
+        self.entrar('maria.rojas')  # Delegado / Jefatura de DEL-002
+        self.assertEqual(self.api('post', 'ausencias/', self.ausencia()).status_code, 201)
+        self.assertEqual(self.api('post', 'felicitaciones/', self.felicitacion()).status_code, 201)
+        # no puede gestionar otra delegación
+        r = self.api('post', 'ausencias/', self.ausencia(delegacionId=Delegacion.objects.get(codigo='DEL-001').pk))
+        self.assertEqual(r.status_code, 403)
+
+    def test_ausencia_validaciones(self):
+        self.entrar('maria.rojas')
+        self.assertEqual(self.json(self.api('post', 'ausencias/', self.ausencia(hasta='2026-11-01')))['error'],
+                         'rango_invalido')
+        self.assertEqual(self.json(self.api('post', 'ausencias/', self.ausencia(tipo='Paseo')))['error'],
+                         'referencia_invalida')
+        juan = User.objects.get(username='juan.perez').pk  # no es del equipo de DEL-002
+        self.assertEqual(self.json(self.api('post', 'ausencias/', self.ausencia(funcionarioId=juan)))['error'],
+                         'referencia_invalida')
+        self.assertEqual(self.api('post', 'ausencias/', self.ausencia()).status_code, 201)
+        r = self.json(self.api('post', 'ausencias/', self.ausencia(desde='2026-11-04', hasta='2026-11-06')))
+        self.assertEqual(r['error'], 'ausencia_traslapada')
+        a = Ausencia.objects.get(funcionario__username='laura.mena')
+        self.assertEqual(self.api('delete', f'ausencias/{a.pk}/').status_code, 200)
+
+    def test_felicitacion_exige_respaldo_formal(self):
+        self.entrar('maria.rojas')
+        for cambio, esperado in [({'respaldoTipo': 'WhatsApp'}, 'respaldo_informal'),
+                                 ({'respaldoReferencia': 'mensaje por whatsapp del vecino'}, 'respaldo_informal'),
+                                 ({'respaldoReferencia': ''}, 'campo_vacio'),
+                                 ({'respaldoTipo': ''}, 'campo_vacio'),
+                                 ({'motivo': ''}, 'campo_vacio'),
+                                 ({'fecha': (timezone.localdate() + timedelta(days=1)).isoformat()}, 'fecha_futura')]:
+            r = self.json(self.api('post', 'felicitaciones/', self.felicitacion(**cambio)))
+            self.assertEqual(r['error'], esperado, cambio)
+        self.assertEqual(Felicitacion.objects.filter(funcionario__username='laura.mena').count(), 1)  # solo la demo

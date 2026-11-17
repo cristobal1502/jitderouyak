@@ -17,7 +17,7 @@
 
   const f = {
     delegacion: $('fDelegacion'), periodo: $('fPeriodo'), funcionario: $('fFuncionario'),
-    tipo: $('fTipo'), sub: $('fSub'), clasificacion: $('fClasificacion'), desde: $('fFechaDesde'), hasta: $('fFechaHasta'), q: $('fPalabras')
+    tipo: $('fTipo'), sub: $('fSub'), clasificacion: $('fClasificacion'), item: $('fItem'), estado: $('fEstado'), desde: $('fFechaDesde'), hasta: $('fFechaHasta'), q: $('fPalabras')
   };
   const applyBtn = $('applyFiltersBtn');
   const clearBtn = $('clearFiltersBtn');
@@ -73,7 +73,7 @@
   function leerFiltros(){
     const datos = {
       delegacion: f.delegacion.value, funcionario: f.funcionario.value, tipo: f.tipo.value,
-      sub: f.sub.value, clasificacion: f.clasificacion.value, desde: f.desde.value, hasta: f.hasta.value, q: f.q.value.trim()
+      sub: f.sub.value, clasificacion: f.clasificacion.value, item: f.item.value, estado: f.estado.value, desde: f.desde.value, hasta: f.hasta.value, q: f.q.value.trim()
     };
     if(datos.desde && datos.hasta && datos.desde > datos.hasta){
       Swal.fire({ icon: 'warning', title: 'Rango de fechas inválido',
@@ -153,6 +153,9 @@
         <td>${SGR.esc(a.tipoNombre)}<br><span class="cell-sub">${SGR.esc(a.subNombre)}</span></td>
         <td>${SGR.esc(a.solicitante)}${a.telefono ? `<br><span class="cell-sub">${SGR.esc(a.telefono)}</span>` : ''}${
           a.clasificacion === 'Otra gestión' ? '<br><span class="tag-otra-gestion">Otra gestión</span>' : ''}</td>
+        <td>${a.itemNombre ? SGR.esc(a.itemNombre) : '<span class="cell-sub">Sin ítem</span>'}<br>${
+          a.estado !== 'Ejecutada' ? '<span class="cell-sub">En preparación</span>'
+            : a.puntaje ? '<span class="puntaje-cell">+1 pto</span>' : '<span class="cell-sub">0 pts</span>'}</td>
         <td>${SGR.esc(a.descripcion)}</td>
       </tr>
     `).join('');
@@ -242,6 +245,9 @@
       opciones(f.tipo, op.tipos, 'Todos los tipos');
       f.clasificacion.innerHTML = '<option value="">Todas</option>' +
         op.clasificaciones.map(c => `<option value="${SGR.esc(c)}">${SGR.esc(c)}</option>`).join('');
+      opciones(f.item, op.items, 'Todos los ítems');
+      f.estado.innerHTML = '<option value="">Todos</option>' +
+        op.estados.map(e => `<option value="${SGR.esc(e)}">${SGR.esc(e)}</option>`).join('');
       subatenciones = op.subatenciones;
       opcionesSub();
       periodos(op.anios);

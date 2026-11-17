@@ -59,6 +59,10 @@
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M14.5 14.2c.8-.3 1.6-.4 2.5-.4 2.8 0 5 2.2 5 5"/></svg>
       Organizaciones
     </a>
+    <a class="nav-item" href="{% url 'matriz' %}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      Matriz SGR
+    </a>
     <div class="nav-group-label">Sistema</div>
     {% if sgr_puede_admin %}
     <a class="nav-item" href="{% url 'administracion' sgr_admin_inicial %}">
@@ -124,6 +128,20 @@
 
         <div class="field-group-2">
           <div class="field">
+            <label for="aItem">Ítem de la matriz SGR <span class="required">*</span></label>
+            <select id="aItem"></select>
+          </div>
+          <div class="field">
+            <label>Estado de la actividad <span class="required">*</span></label>
+            <div class="segmented" role="radiogroup" aria-label="Estado de la actividad">
+              <label><input type="radio" name="aEstado" value="Ejecutada" checked> Ejecutada <small>suma puntaje</small></label>
+              <label><input type="radio" name="aEstado" value="Preparación"> En preparación <small>correos, coordinar, invitar: no suma</small></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-group-2">
+          <div class="field">
             <label for="aDelegacion">Delegación <span class="required">*</span></label>
             <select id="aDelegacion"></select>
           </div>
@@ -161,6 +179,7 @@
               <th style="width:100px;">Fecha</th>
               <th>Vecino(a)</th>
               <th>Tipo / Sub atención</th>
+              <th style="width:150px;">Ítem · Puntaje</th>
               <th>Descripción</th>
               <th>Delegación</th>
               <th>Responsable</th>

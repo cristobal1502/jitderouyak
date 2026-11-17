@@ -8,6 +8,8 @@ const fEsDelegado = document.getElementById('aEsDelegado');
 const fechaAyuda = document.getElementById('fechaAyuda');
 const fFecha = document.getElementById('aFecha');
 const fTipo = document.getElementById('aTipo');
+const fItem = document.getElementById('aItem');
+const estadoElegido = () => (document.querySelector('input[name="aEstado"]:checked') || {}).value || 'Ejecutada';
 const fSub = document.getElementById('aSub');
 const fDelegacion = document.getElementById('aDelegacion');
 const fResponsable = document.getElementById('aResponsable');
@@ -20,7 +22,7 @@ const contador = document.getElementById('contador');
 const hoy = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD en hora local
 
 /* Catálogos y atenciones vienen de la base de datos (API) */
-let opcionesApi = { tipos: [], subatenciones: [], delegaciones: [], responsables: [], fechaMinima: '', maxPorDia: 7 };
+let opcionesApi = { tipos: [], subatenciones: [], items: [], delegaciones: [], responsables: [], fechaMinima: '', maxPorDia: 7 };
 const telefonoValido = (t) => /^[0-9+()\s-]+$/.test(t) && t.replace(/\D/g, '').length >= 8 && t.replace(/\D/g, '').length <= 15;
 let atenciones = [];
 
@@ -32,6 +34,7 @@ function opciones(lista, placeholder){
 
 function cargarTipos(){
   fTipo.innerHTML = opciones(opcionesApi.tipos, 'Selecciona un tipo…');
+  fItem.innerHTML = opciones(opcionesApi.items, 'Selecciona el ítem…');
 }
 
 function cargarSubatenciones(){
@@ -94,6 +97,26 @@ function mostrarAlerta(caso, ctx = {}){
     case 'tipo_vacio':
       Swal.fire({ icon: 'error', title: 'Falta el tipo de atención', text: 'Selecciona el tipo de atención.', confirmButtonColor: BTN });
       marcar(fTipo); break;
+    case 'item_vacio':
+      Swal.fire({ icon: 'error', title: 'Falta el ítem', text: 'Selecciona el ítem de la matriz SGR al que corresponde la actividad.', confirmButtonColor: BTN });
+      marcar(fItem); break;
+    case 'tope':
+      Swal.fire({ icon: 'warning', title: `«${ctx.alerta.item}» ya está en ${ctx.alerta.cumplimiento}%`,
+        html: `<p>La actividad <b>${esc(ctx.codigo)}</b> quedó registrada, pero <b>no suma puntaje</b>: el ítem superó el tope de 120% del mes.</p>` +
+          (ctx.alerta.sugeridos.length
+            ? `<p style="margin-top:10px;">Enfócate en los ítems más bajos:</p><ul style="text-align:left;margin:8px auto 0;display:inline-block;">${
+                ctx.alerta.sugeridos.map((x) => `<li>${esc(x.item)} — ${x.cumplimiento}%</li>`).join('')}</ul>`
+            : ''),
+        confirmButtonColor: BTN });
+      break;
+    case 'ejecutada':
+      Swal.fire({ icon: 'success', title: 'Actividad ejecutada',
+        text: ctx.puntaje ? `${ctx.codigo} ahora suma 1 punto.` : `${ctx.codigo} quedó ejecutada, pero no suma puntaje (${ctx.motivo}).`,
+        timer: ctx.puntaje ? 1600 : 3200, showConfirmButton: false });
+      break;
+    case 'ejecucion_anterior':
+      Swal.fire({ icon: 'warning', title: 'Fecha no válida', text: 'La ejecución no puede ser anterior a la fecha en que se registró la actividad.', confirmButtonColor: BTN });
+      break;
     case 'sub_vacia':
       Swal.fire({ icon: 'error', title: 'Falta la sub atención', text: 'Selecciona la sub atención correspondiente al tipo elegido.', confirmButtonColor: BTN });
       marcar(fSub); break;
@@ -117,13 +140,15 @@ function mostrarAlerta(caso, ctx = {}){
         text: 'Alguna de las opciones elegidas cambió mientras completabas el formulario. Se recargaron las listas; revisa y vuelve a intentar.',
         confirmButtonColor: BTN });
       break;
-    case 'guardado':
-      Swal.fire({ icon: 'success', title: 'Atención registrada',
-        text: ctx.otraGestion
-          ? `Se generó el código ${ctx.codigo}. Quedó como «Otra gestión» porque el solicitante es el Delegado.`
-          : `Se generó el código ${ctx.codigo}.`,
-        timer: ctx.otraGestion ? 3200 : 1600, showConfirmButton: false });
+    case 'guardado': {
+      let nota = '';
+      if(ctx.otraGestion) nota = ' Quedó como «Otra gestión» porque el solicitante es el Delegado: no suma puntaje.';
+      else if(ctx.preparacion) nota = ' Quedó en preparación: sumará puntaje cuando la marques como ejecutada.';
+      else if(ctx.puntaje) nota = ' Sumó 1 punto a la matriz.';
+      Swal.fire({ icon: 'success', title: 'Atención registrada', text: `Se generó el código ${ctx.codigo}.${nota}`,
+        timer: nota && !ctx.puntaje ? 3400 : 1800, showConfirmButton: false });
       break;
+    }
     default:
       Swal.fire({ icon: 'error', title: 'No se pudo registrar', text: 'Revisa los datos e inténtalo nuevamente.', confirmButtonColor: BTN });
   }
@@ -131,7 +156,7 @@ function mostrarAlerta(caso, ctx = {}){
 
 /** Traduce un error de la API al popup que corresponde. */
 const CASO_CAMPO_VACIO = {
-  solicitante: 'solicitante_vacio', telefono: 'telefono_vacio', tipoId: 'tipo_vacio', subId: 'sub_vacia',
+  solicitante: 'solicitante_vacio', telefono: 'telefono_vacio', itemId: 'item_vacio', tipoId: 'tipo_vacio', subId: 'sub_vacia',
   delegacionId: 'delegacion_vacia', responsableId: 'responsable_vacio', fecha: 'fecha_vacia'
 };
 
@@ -149,6 +174,11 @@ function manejarError(err){
       return mostrarAlerta('semana_cerrada', { limite: err.detalle });
     case 'limite_diario':
       return mostrarAlerta('limite_diario', { max: err.detalle });
+    case 'ejecucion_anterior':
+      return mostrarAlerta('ejecucion_anterior');
+    case 'ya_ejecutada':
+      cargarAtenciones();
+      return;
     case 'referencia_invalida':
     case 'sub_no_corresponde':
     case 'responsable_invalido':
@@ -160,6 +190,28 @@ function manejarError(err){
 }
 
 /* ---------- Tabla de atenciones registradas ---------- */
+function motivoSinPuntaje(a){
+  if(a.estado !== 'Ejecutada') return 'en preparación';
+  if(a.clasificacion === 'Otra gestión') return 'otra gestión';
+  if(!a.telefono) return 'sin teléfono del vecino';
+  if(!a.itemId) return 'sin ítem';
+  if(a.topeAlcanzado) return 'ítem sobre 120%';
+  return '';
+}
+
+function celdaPuntaje(a){
+  const item = a.itemNombre ? esc(a.itemNombre) : '<span class="due-note">Sin ítem</span>';
+  let estado;
+  if(a.estado !== 'Ejecutada'){
+    estado = `<span class="badge pendiente"><span class="dot"></span>En preparación</span>` +
+      (form ? `<br><button type="button" class="btn-table" data-ejecutar="${a.id}" style="margin-top:6px;">Marcar ejecutada</button>` : '');
+  } else if(a.puntaje){
+    estado = '<span class="puntaje-cell">+1 pto</span>';
+  } else {
+    estado = `<span class="due-note">0 pts · ${esc(motivoSinPuntaje(a))}</span>`;
+  }
+  return `${item}<br>${estado}`;
+}
 function renderTabla(){
   tablaBody.innerHTML = atenciones.map((a) => `
     <tr>
@@ -168,6 +220,7 @@ function renderTabla(){
       <td>${esc(a.solicitante)}${a.telefono ? `<span class="due-note">${esc(a.telefono)}</span>` : ''}${
         a.clasificacion === 'Otra gestión' ? '<br><span class="tag-otra-gestion">Otra gestión</span>' : ''}</td>
       <td>${esc(a.tipoNombre)}<span class="due-note">${esc(a.subNombre)}</span></td>
+      <td>${celdaPuntaje(a)}</td>
       <td>${esc(a.descripcion)}</td>
       <td>${esc(a.delegacionNombre)}</td>
       <td>${esc(a.responsableNombre)}</td>
@@ -178,6 +231,31 @@ function renderTabla(){
 }
 
 /* ---------- Carga desde la API ---------- */
+tablaBody.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-ejecutar]');
+  if(!btn) return;
+  const a = atenciones.find((x) => x.id === Number(btn.dataset.ejecutar));
+  if(!a) return;
+  const res = await Swal.fire({
+    icon: 'question', title: `¿Marcar ${a.codigo} como ejecutada?`,
+    html: '<p>Indica la fecha en que se realizó la actividad.</p>' +
+      `<input type="date" id="fechaEjecucion" class="swal2-input" value="${hoy()}" min="${a.fecha}" max="${hoy()}">`,
+    showCancelButton: true, confirmButtonText: 'Marcar ejecutada', cancelButtonText: 'Cancelar', confirmButtonColor: BTN,
+    preConfirm: () => document.getElementById('fechaEjecucion').value
+  });
+  if(!res.isConfirmed) return;
+  btn.disabled = true;
+  try {
+    const r = await SGR.post(`atenciones/${a.id}/ejecutar/`, { fecha: res.value || hoy() });
+    await cargarAtenciones();
+    if(r.alerta) mostrarAlerta('tope', { alerta: r.alerta, codigo: r.codigo });
+    else mostrarAlerta('ejecutada', { codigo: r.codigo, puntaje: r.puntaje, motivo: motivoSinPuntaje(r) });
+  } catch(err) {
+    btn.disabled = false;
+    manejarError(err);
+  }
+});
+
 async function cargarAtenciones(){
   try {
     atenciones = await SGR.get('atenciones/');
@@ -231,6 +309,7 @@ if(form){
     if(telefono === ''){ mostrarAlerta('telefono_vacio'); return; }
     if(!telefonoValido(telefono)){ mostrarAlerta('telefono_invalido'); return; }
     if(!fTipo.value){ mostrarAlerta('tipo_vacio'); return; }
+    if(!fItem.value){ mostrarAlerta('item_vacio'); return; }
     if(!fSub.value){ mostrarAlerta('sub_vacia'); return; }
     if(descripcion.length < 10){ mostrarAlerta('descripcion_vacia'); return; }
     if(!fDelegacion.value){ mostrarAlerta('delegacion_vacia'); return; }
@@ -245,6 +324,8 @@ if(form){
         solicitante,
         telefono,
         solicitanteEsDelegado: fEsDelegado.checked,
+        itemId: Number(fItem.value),
+        estado: estadoElegido(),
         tipoId: Number(fTipo.value),
         subId: Number(fSub.value),
         descripcion,
@@ -254,7 +335,9 @@ if(form){
       });
       limpiar();
       await cargarAtenciones();
-      mostrarAlerta('guardado', { codigo: registro.codigo, otraGestion: registro.clasificacion === 'Otra gestión' });
+      if(registro.alerta) mostrarAlerta('tope', { alerta: registro.alerta, codigo: registro.codigo });
+      else mostrarAlerta('guardado', { codigo: registro.codigo, otraGestion: registro.clasificacion === 'Otra gestión',
+        preparacion: registro.estado !== 'Ejecutada', puntaje: registro.puntaje });
     } catch(err) {
       manejarError(err);
     } finally {

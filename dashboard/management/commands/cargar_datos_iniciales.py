@@ -12,8 +12,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from dashboard.models import (
-    Atencion, CasoSocial, Delegacion, GestionSocial, ItemMeta, OrganizacionComunitaria, Perfil, Rol,
-    SubAtencion, TipoAtencion,
+    Atencion, Ausencia, CasoSocial, Delegacion, Felicitacion, GestionSocial, ItemMeta,
+    OrganizacionComunitaria, Perfil, Rol, SubAtencion, TipoAtencion,
 )
 
 ROLES = [
@@ -183,13 +183,15 @@ class Command(BaseCommand):
             juan = User.objects.get(username='juan.perez')
             carla = User.objects.get(username='carla.tapia')
             demo = [
-                ('AT-001', 'María Morales Carrasco', '+56 9 8765 4321', 'TAT-001', 'SUB-001', 'Entrevista en delegación y ficha FIBE.',
+                ('AT-001', 'María Morales Carrasco', '+56 9 8765 4321', 'ITM-001', 'TAT-001', 'SUB-001', 'Entrevista en delegación y ficha FIBE.',
                  'DEL-003', carla, date(2026, 10, 5)),
-                ('AT-002', 'Carlos Araya Godoy', '+56 9 1122 3344', 'TAT-002', 'SUB-003', 'Verificación de techumbre tras lluvias.',
+                ('AT-002', 'Carlos Araya Godoy', '+56 9 1122 3344', 'ITM-002', 'TAT-002', 'SUB-003', 'Verificación de techumbre tras lluvias.',
                  'DEL-001', juan, date(2026, 10, 8)),
             ]
-            for codigo, sol, tel, tipo, sub, desc, deleg, resp, fecha in demo:
+            for codigo, sol, tel, item, tipo, sub, desc, deleg, resp, fecha in demo:
                 Atencion.objects.get_or_create(codigo=codigo, defaults={
+                    'item': ItemMeta.objects.get(codigo=item), 'estado': Atencion.EJECUTADA,
+                    'ejecutada_el': fecha, 'puntaje': 1,
                     'solicitante': sol, 'telefono': tel, 'tipo': tipos[tipo], 'subatencion': subs[sub], 'descripcion': desc,
                     'delegacion': dels[deleg], 'responsable': resp, 'fecha': fecha, 'creado_por': admin_user})
             for codigo, nombre, rut, tel, sector, deleg, creador, gestiones in CASOS_DEMO:
@@ -204,6 +206,16 @@ class Command(BaseCommand):
                 OrganizacionComunitaria.objects.get_or_create(codigo=codigo, defaults={
                     'nombre': nombre, 'tipo': tipo, 'subcategoria': sub, 'delegacion': dels[deleg],
                     'sector': sector, 'representante': rep, 'telefono': tel, 'verificacion': verif})
+            maria = User.objects.get(username='maria.rojas')
+            Ausencia.objects.get_or_create(
+                funcionario=juan, desde=date(2026, 10, 19), defaults={
+                    'tipo': 'Vacaciones', 'hasta': date(2026, 10, 23), 'registrada_por': admin_user})
+            Felicitacion.objects.get_or_create(
+                funcionario=User.objects.get(username='laura.mena'), fecha=date(2026, 10, 12), defaults={
+                    'delegacion': dels['DEL-002'], 'emisor': 'Junta de Vecinos Las Compañías Norte',
+                    'motivo': 'Gestión rápida del operativo de limpieza en la plaza del sector.',
+                    'respaldo_tipo': 'Carta firmada', 'respaldo_referencia': 'Carta folio 2026-118',
+                    'registrada_por': maria})
             self.stdout.write(self.style.SUCCESS('Datos de ejemplo cargados (contraseña de los usuarios demo: Demo1234!).'))
 
         self.stdout.write(self.style.SUCCESS('Listo: roles, catálogos y administrador.'))

@@ -194,3 +194,9 @@ def organizaciones(request):
         'entidad': 'organizaciones',
         'solo_lectura': not P.tiene_permiso(request.user, P.PERM_CATALOGOS),
     })
+
+
+@login_required
+def matriz(request):
+    """Vista de equipo de la Matriz SGR (datos por API)."""
+    return render(request, 'dashboard/matriz.html')
