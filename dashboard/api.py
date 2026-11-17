@@ -235,20 +235,20 @@ class ItemsRecurso(CatalogoSimple):
     prefijo = 'ITM'
 
     def serializar(self, o):
-        return {**super().serializar(o), 'metaMensual': o.meta_mensual}
+        return {**super().serializar(o), 'metaTrimestral': o.meta_trimestral}
 
     def validar(self, datos, instancia, request):
         valores = super().validar(datos, instancia, request)
-        meta = datos.get('metaMensual')
+        meta = datos.get('metaTrimestral')
         if meta in (None, ''):
-            raise ErrorApi('campo_vacio', 'metaMensual')
+            raise ErrorApi('campo_vacio', 'metaTrimestral')
         try:
             meta = int(meta)
         except (TypeError, ValueError):
-            raise ErrorApi('numero_invalido', 'metaMensual')
-        if not 1 <= meta <= 500:
-            raise ErrorApi('numero_invalido', 'metaMensual')
-        valores['meta_mensual'] = meta
+            raise ErrorApi('numero_invalido', 'metaTrimestral')
+        if not 1 <= meta <= 1500:
+            raise ErrorApi('numero_invalido', 'metaTrimestral')
+        valores['meta_trimestral'] = meta
         return valores
 
     def usos(self, o):
@@ -441,6 +441,49 @@ class UsuariosRecurso(Recurso):
         perfil.user.delete()  # elimina también el Perfil (CASCADE)
 
 
+def leer_directiva(datos):
+    """Presidente, tesorero y secretario: nombre y RUT obligatorios, y tres RUT distintos.
+    El campo del error se informa como 'directiva.<cargo>.<nombre|rut>'."""
+    directiva = datos.get('directiva')
+    if not isinstance(directiva, dict):
+        directiva = {}
+    valores, ruts = {}, {}
+    for cargo, _ in OrganizacionComunitaria.CARGOS:
+        persona = directiva.get(cargo) if isinstance(directiva.get(cargo), dict) else {}
+        nombre = persona.get('nombre')
+        nombre = nombre.strip() if isinstance(nombre, str) else ''
+        if not nombre:
+            raise ErrorApi('campo_vacio', f'directiva.{cargo}.nombre')
+        if len(nombre) > 150:
+            raise ErrorApi('texto_largo', f'directiva.{cargo}.nombre', '150')
+        if not re.search(r'[^\W\d_]', nombre):
+            raise ErrorApi('nombre_invalido', f'directiva.{cargo}.nombre')
+        rut_txt = persona.get('rut') if isinstance(persona.get('rut'), str) else ''
+        if not rut_txt.strip():
+            raise ErrorApi('campo_vacio', f'directiva.{cargo}.rut')
+        rut = validar_rut(rut_txt, f'directiva.{cargo}.rut')
+        if rut in ruts.values():
+            raise ErrorApi('rut_repetido', f'directiva.{cargo}.rut')
+        ruts[cargo] = rut
+        valores[f'{cargo}_nombre'] = nombre
+        valores[f'{cargo}_rut'] = rut
+    return valores
+
+
+def organizaciones_por_rut(rut):
+    """Organizaciones activas donde esa persona es parte de la directiva, con su cargo."""
+    filtro = Q(presidente_rut=rut) | Q(tesorero_rut=rut) | Q(secretario_rut=rut)
+    resultado = []
+    for o in OrganizacionComunitaria.objects.filter(filtro, activo=True).select_related('delegacion'):
+        for cargo, etiqueta in OrganizacionComunitaria.CARGOS:
+            if getattr(o, f'{cargo}_rut') == rut:
+                resultado.append({'id': o.pk, 'codigo': o.codigo, 'nombre': o.nombre, 'cargo': etiqueta,
+                                  'personaNombre': getattr(o, f'{cargo}_nombre'),
+                                  'delegacionId': o.delegacion_id, 'delegacionNombre': o.delegacion.nombre,
+                                  'verificacion': o.verificacion})
+    return resultado
+
+
 class OrganizacionesRecurso(ConCodigo):
     slug = 'organizaciones'
     modelo = OrganizacionComunitaria
@@ -453,8 +496,9 @@ class OrganizacionesRecurso(ConCodigo):
     def serializar(self, o):
         return {'id': o.pk, 'codigo': o.codigo, 'nombre': o.nombre, 'tipo': o.tipo,
                 'subcategoria': o.subcategoria, 'delegacionId': o.delegacion_id, 'sector': o.sector,
-                'representante': o.representante, 'telefono': o.telefono,
-                'verificacion': o.verificacion, 'estado': estado_txt(o.activo)}
+                'directiva': {cargo: {'nombre': getattr(o, f'{cargo}_nombre'), 'rut': getattr(o, f'{cargo}_rut')}
+                              for cargo, _ in OrganizacionComunitaria.CARGOS},
+                'telefono': o.telefono, 'verificacion': o.verificacion, 'estado': estado_txt(o.activo)}
 
     def validar(self, datos, instancia, request):
         tipo = datos.get('tipo')
@@ -484,18 +528,16 @@ class OrganizacionesRecurso(ConCodigo):
         if verificacion not in dict(OrganizacionComunitaria.VERIFICACIONES):
             raise ErrorApi('referencia_invalida', 'verificacion')
 
-        representante = (datos.get('representante') or '').strip()
-        if len(representante) > 150:
-            raise ErrorApi('texto_largo', 'representante', '150')
+        directiva = leer_directiva(datos)
 
         return {
+            **directiva,
             'codigo': self.codigo_validado(datos, instancia),
             'nombre': leer_texto(datos, 'nombre', 150),
             'tipo': tipo,
             'subcategoria': subcategoria,
             'delegacion': delegacion,
             'sector': leer_texto(datos, 'sector', 120),
-            'representante': representante,
             'telefono': telefono,
             'verificacion': verificacion,
             'activo': leer_estado(datos),
@@ -651,11 +693,23 @@ def serializar_atencion(a):
         'delegacionId': a.delegacion_id, 'delegacionNombre': a.delegacion.nombre,
         'responsableId': a.responsable_id, 'responsableNombre': P.nombre_visible(a.responsable),
         'fecha': a.fecha.isoformat(),
+        'beneficiario': a.beneficiario,
+        'organizacionId': a.organizacion_id,
+        'organizacionNombre': a.organizacion.nombre if a.organizacion_id else '',
+        'etapa': a.etapa,
+        'fechaCompromiso': a.fecha_compromiso.isoformat() if a.fecha_compromiso else None,
+        'vencido': esta_vencida(a),
     }
 
 
+def esta_vencida(a, hoy=None):
+    """Una actividad no realizada cuyo plazo ya pasó."""
+    hoy = hoy or timezone.localdate()
+    return a.etapa != Atencion.REALIZADO and a.fecha_compromiso is not None and a.fecha_compromiso < hoy
+
+
 def atenciones_visibles(user):
-    qs = Atencion.objects.select_related('tipo', 'subatencion', 'delegacion', 'responsable', 'item')
+    qs = Atencion.objects.select_related('tipo', 'subatencion', 'delegacion', 'responsable', 'item', 'organizacion')
     alcance = P.alcance_de(user)
     if alcance == P.ALCANCE_TODAS:
         return qs
@@ -693,7 +747,24 @@ def opciones_atencion(request):
         'responsables': responsables,
         'fechaMinima': primera_fecha_abierta().isoformat(),
         'maxPorDia': Atencion.MAX_POR_DIA,
+        'plazoDias': Atencion.PLAZO_DIAS,
+        'organizaciones': [{'id': o.pk, 'nombre': o.nombre, 'delegacionId': o.delegacion_id, 'tipo': o.tipo}
+                           for o in OrganizacionComunitaria.objects.filter(activo=True, delegacion__in=ids)
+                           .order_by('nombre')],
     })
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['GET'])
+def organizaciones_rut(request):
+    """Al escribir el RUT del vecino: ¿es dirigente de alguna organización? Devuelve el RUT
+    formateado y las organizaciones (con su cargo) donde aparece en la directiva."""
+    texto = (request.GET.get('rut') or '').strip()
+    if not texto:
+        raise ErrorApi('campo_vacio', 'rut')
+    rut = validar_rut(texto)
+    return JsonResponse({'rut': rut, 'organizaciones': organizaciones_por_rut(rut)})
 
 
 def limite_ingreso(fecha):
@@ -807,8 +878,30 @@ def _validar_atencion(datos, user):
     es_delegado = datos.get('solicitanteEsDelegado') is True or solicitante_es_delegado(solicitante, delegacion)
     clasificacion = Atencion.OTRA_GESTION if es_delegado else Atencion.CIUDADANA
 
+    beneficiario = datos.get('beneficiario') or Atencion.PERSONA
+    if beneficiario not in dict(Atencion.BENEFICIARIOS):
+        raise ErrorApi('referencia_invalida', 'beneficiario')
+    organizacion = None
+    if beneficiario == Atencion.ORGANIZACION:
+        organizacion = leer_id(datos, 'organizacionId', OrganizacionComunitaria)
+        if not organizacion.activo:
+            raise ErrorApi('referencia_invalida', 'organizacionId')
+
+    plazo_txt = datos.get('fechaCompromiso')
+    if plazo_txt:
+        try:
+            plazo = date.fromisoformat(str(plazo_txt))
+        except ValueError:
+            raise ErrorApi('fecha_invalida', 'fechaCompromiso')
+        if plazo < fecha:
+            raise ErrorApi('plazo_anterior', 'fechaCompromiso')
+    else:
+        plazo = fecha + timedelta(days=Atencion.PLAZO_DIAS)
+
     return {'solicitante': solicitante, 'rut': rut, 'telefono': telefono, 'tipo': tipo, 'subatencion': sub,
             'item': item, 'estado': estado, 'ejecutada_el': fecha if estado == Atencion.EJECUTADA else None,
+            'etapa': Atencion.REALIZADO if estado == Atencion.EJECUTADA else Atencion.INGRESADO,
+            'fecha_compromiso': plazo, 'beneficiario': beneficiario, 'organizacion': organizacion,
             'descripcion': descripcion, 'delegacion': delegacion, 'responsable': responsable,
             'fecha': fecha, 'clasificacion': clasificacion}
 
@@ -838,6 +931,35 @@ def atenciones(request):
     return JsonResponse({**serializar_atencion(atencion), 'alerta': alerta}, status=201)
 
 
+def _fecha_ejecucion(texto, atencion):
+    hoy = timezone.localdate()
+    try:
+        dia = date.fromisoformat(str(texto or hoy.isoformat()))
+    except ValueError:
+        raise ErrorApi('fecha_invalida', 'fecha')
+    if dia > hoy:
+        raise ErrorApi('fecha_futura', 'fecha')
+    if dia < atencion.fecha:
+        raise ErrorApi('ejecucion_anterior', 'fecha', atencion.fecha.isoformat())
+    if hoy > limite_ingreso(dia):
+        raise ErrorApi('semana_cerrada', 'fecha', limite_ingreso(dia).isoformat())
+    return dia
+
+
+def marcar_ejecutada(pk, dia):
+    """Pasa una actividad a Ejecutada / Realizado y calcula su puntaje. Bloquea la fila mientras tanto."""
+    with transaction.atomic():
+        atencion = Atencion.objects.select_for_update().select_related('item', 'responsable').get(pk=pk)
+        if atencion.estado == Atencion.EJECUTADA:
+            raise ErrorApi('ya_ejecutada', status=409)
+        atencion.estado = Atencion.EJECUTADA
+        atencion.etapa = Atencion.REALIZADO
+        atencion.ejecutada_el = dia
+        alerta = M.asignar_puntaje(atencion)
+        atencion.save(update_fields=['estado', 'etapa', 'ejecutada_el', 'puntaje', 'tope_alcanzado'])
+    return alerta
+
+
 @api_login_requerido
 @con_errores
 @require_http_methods(['POST'])
@@ -849,28 +971,91 @@ def ejecutar_atencion(request, pk):
         raise ErrorApi('no_encontrado', status=404)
     if atencion.estado == Atencion.EJECUTADA:
         raise ErrorApi('ya_ejecutada', status=409)
+    dia = _fecha_ejecucion(leer_json(request).get('fecha'), atencion)
+    alerta = marcar_ejecutada(pk, dia)
+    return JsonResponse({**serializar_atencion(atenciones_visibles(request.user).get(pk=pk)), 'alerta': alerta})
 
-    datos = leer_json(request)
+
+# ---------------------------------------------------------- tubo de trabajo
+def puede_mover_tubo(user):
+    return P.tiene_permiso(user, (P.PERM_REGISTRAR, P.PERM_AGENDA))
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['GET'])
+def tubo(request):
+    """Actividades del tubo según el alcance del rol. Filtros: delegacion, responsable, etapa
+    (incluye 'Vencido') y q. Devuelve también el conteo por etapa."""
+    user, params = request.user, request.GET
+    qs = atenciones_visibles(user)
+    delegacion = _leer_pk(params, 'delegacion')
+    if delegacion is not None:
+        if not P.delegaciones_de(user).filter(pk=delegacion).exists():
+            raise ErrorApi('prohibido', 'delegacion', status=403)
+        qs = qs.filter(delegacion_id=delegacion)
+    responsable = _leer_pk(params, 'responsable')
+    if responsable is not None:
+        qs = qs.filter(responsable_id=responsable)
+    q = (params.get('q') or '').strip()
+    for palabra in q.split()[:6]:
+        qs = qs.filter(Q(codigo__icontains=palabra) | Q(solicitante__icontains=palabra)
+                       | Q(descripcion__icontains=palabra) | Q(organizacion__nombre__icontains=palabra))
+
     hoy = timezone.localdate()
-    try:
-        dia = date.fromisoformat(str(datos.get('fecha') or hoy.isoformat()))
-    except ValueError:
-        raise ErrorApi('fecha_invalida', 'fecha')
-    if dia > hoy:
-        raise ErrorApi('fecha_futura', 'fecha')
-    if dia < atencion.fecha:
-        raise ErrorApi('ejecucion_anterior', 'fecha', atencion.fecha.isoformat())
-    if hoy > limite_ingreso(dia):
-        raise ErrorApi('semana_cerrada', 'fecha', limite_ingreso(dia).isoformat())
+    todas = list(qs.order_by('fecha_compromiso', 'fecha', 'id')[:1000])
+    conteo = {e: 0 for e, _ in Atencion.ETAPAS}
+    conteo['Vencido'] = 0
+    for a in todas:
+        conteo[a.etapa] += 1
+        if esta_vencida(a, hoy):
+            conteo['Vencido'] += 1
 
-    with transaction.atomic():
-        atencion = Atencion.objects.select_for_update().select_related('item', 'responsable').get(pk=pk)
-        atencion.estado = Atencion.EJECUTADA
-        atencion.ejecutada_el = dia
-        alerta = M.asignar_puntaje(atencion)
-        atencion.save(update_fields=['estado', 'ejecutada_el', 'puntaje', 'tope_alcanzado'])
-    atencion = atenciones_visibles(request.user).get(pk=pk)
-    return JsonResponse({**serializar_atencion(atencion), 'alerta': alerta})
+    etapa = (params.get('etapa') or '').strip()
+    if etapa == 'Vencido':
+        todas = [a for a in todas if esta_vencida(a, hoy)]
+    elif etapa:
+        if etapa not in dict(Atencion.ETAPAS):
+            raise ErrorApi('referencia_invalida', 'etapa')
+        todas = [a for a in todas if a.etapa == etapa]
+
+    responsables = (User.objects.filter(pk__in=atenciones_visibles(user).values('responsable'))
+                    .order_by('first_name', 'last_name', 'username'))
+    return JsonResponse({
+        'actividades': [serializar_atencion(a) for a in todas],
+        'conteo': {**conteo, 'Total': sum(conteo[e] for e, _ in Atencion.ETAPAS)},
+        'etapas': [e for e, _ in Atencion.ETAPAS],
+        'responsables': [{'id': u.pk, 'nombre': P.nombre_visible(u)} for u in responsables],
+        'delegaciones': [{'id': d.pk, 'nombre': d.nombre} for d in P.delegaciones_de(user).order_by('nombre')],
+        'puedeMover': puede_mover_tubo(user),
+    })
+
+
+@api_login_requerido
+@con_errores
+@require_http_methods(['POST'])
+def mover_etapa(request, pk):
+    """Mueve una actividad entre las etapas del tubo. Llevarla a «Realizado» la marca como
+    ejecutada (y suma su punto si corresponde). Una actividad realizada ya no se puede devolver."""
+    if not puede_mover_tubo(request.user):
+        raise ErrorApi('prohibido', status=403)
+    atencion = atenciones_visibles(request.user).filter(pk=pk).first()
+    if atencion is None:
+        raise ErrorApi('no_encontrado', status=404)
+    datos = leer_json(request)
+    etapa = datos.get('etapa')
+    if etapa not in dict(Atencion.ETAPAS):
+        raise ErrorApi('referencia_invalida', 'etapa')
+    if atencion.etapa == Atencion.REALIZADO:
+        raise ErrorApi('ya_realizada', 'etapa', status=409)
+
+    alerta = None
+    if etapa == Atencion.REALIZADO:
+        dia = _fecha_ejecucion(datos.get('fecha'), atencion)
+        alerta = marcar_ejecutada(pk, dia)
+    elif etapa != atencion.etapa:
+        Atencion.objects.filter(pk=pk).update(etapa=etapa)
+    return JsonResponse({**serializar_atencion(atenciones_visibles(request.user).get(pk=pk)), 'alerta': alerta})
 
 
 # ---------------------------------------------------------- búsqueda avanzada
@@ -962,6 +1147,7 @@ def filtrar_busqueda(user, params):
     for palabra in q.split():
         qs = qs.filter(Q(codigo__icontains=palabra) | Q(solicitante__icontains=palabra)
                        | Q(telefono__icontains=palabra) | Q(rut__icontains=palabra)
+                       | Q(organizacion__nombre__icontains=palabra)
                        | Q(descripcion__icontains=palabra) | Q(tipo__nombre__icontains=palabra)
                        | Q(subatencion__nombre__icontains=palabra))
 
@@ -1014,14 +1200,15 @@ def opciones_busqueda(request):
 
 
 COLUMNAS_EXPORTAR = ['Código', 'Fecha', 'Funcionario', 'Delegación', 'Tipo de atención',
-                     'Sub atención', 'Solicitante', 'RUT', 'Teléfono', 'Clasificación', 'Ítem / meta', 'Estado',
+                     'Sub atención', 'Solicitante', 'RUT', 'Teléfono', 'Organización', 'Clasificación', 'Ítem / meta', 'Estado',
                      'Puntaje', 'Descripción']
 
 
 def filas_exportar(qs):
     for a in qs[:BUSQUEDA_MAX_EXPORTAR]:
         yield [a.codigo, a.fecha, P.nombre_visible(a.responsable), a.delegacion.nombre,
-               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.rut, a.telefono, a.clasificacion,
+               a.tipo.nombre, a.subatencion.nombre, a.solicitante, a.rut, a.telefono,
+               a.organizacion.nombre if a.organizacion_id else '', a.clasificacion,
                a.item.nombre if a.item_id else '', a.estado, a.puntaje, a.descripcion]
 
 
@@ -1046,7 +1233,7 @@ def exportar_busqueda(request):
         ws.append(fila)
     for celda in ws['B'][1:]:
         celda.number_format = 'DD/MM/YYYY'
-    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 13, 16, 20, 24, 14, 9, 60], start=1):
+    for i, ancho in enumerate([10, 12, 22, 20, 22, 26, 28, 13, 16, 28, 20, 24, 14, 9, 60], start=1):
         ws.column_dimensions[get_column_letter(i)].width = ancho
     ws.freeze_panes = 'A2'
     ws.auto_filter.ref = ws.dimensions
@@ -1161,14 +1348,29 @@ def equipo_de(delegacion):
     return candidatos.filter(pk__in=ids)
 
 
-def _leer_mes(texto):
-    hoy = timezone.localdate()
+def _leer_trimestre(texto):
+    """'2026-Q4' → (2026, 4). Sin valor: el trimestre actual."""
     if not texto:
-        return hoy.year, hoy.month
-    m = re.fullmatch(r'(\d{4})-(\d{2})', texto.strip())
-    if not m or not 1 <= int(m.group(2)) <= 12:
-        raise ErrorApi('fecha_invalida', 'mes')
+        return M.trimestre_de(timezone.localdate())
+    m = re.fullmatch(r'(\d{4})-Q([1-4])', texto.strip().upper())
+    if not m:
+        raise ErrorApi('fecha_invalida', 'trimestre')
     return int(m.group(1)), int(m.group(2))
+
+
+def trimestres_disponibles():
+    """Trimestres para el selector: desde el de la actividad más antigua hasta el actual."""
+    hoy = timezone.localdate()
+    primera = Atencion.objects.order_by('fecha').values_list('fecha', flat=True).first() or hoy
+    lista = []
+    anio, q = M.trimestre_de(hoy)
+    inicio = min(M.trimestre_de(primera), (hoy.year, 1))  # al menos todo el año en curso
+    while (anio, q) >= inicio and len(lista) < 20:
+        desde, hasta = M.rango_trimestre(anio, q)
+        lista.append({'valor': f'{anio}-Q{q}', 'nombre': M.nombre_trimestre(anio, q),
+                      'desde': desde.isoformat(), 'hasta': hasta.isoformat()})
+        anio, q = M.trimestre_anterior(anio, q)
+    return lista
 
 
 def _delegacion_de_equipo(user, pk, exigir_delegado=False):
@@ -1197,15 +1399,16 @@ def serializar_felicitacion(f):
 @con_errores
 @require_http_methods(['GET'])
 def matriz_equipo(request):
-    """Avance de la matriz SGR del equipo de una delegación en un mes."""
+    """Avance de la matriz SGR del equipo de una delegación en un trimestre, con el sobrante
+    que llega del trimestre anterior."""
     user = request.user
     delegaciones = list(P.delegaciones_de(user).filter(activo=True).order_by('nombre'))
     if not delegaciones:
         raise ErrorApi('sin_delegacion', status=403)
     pk = _leer_pk(request.GET, 'delegacion')
     delegacion = _delegacion_de_equipo(user, pk) if pk is not None else delegaciones[0]
-    anio, mes = _leer_mes(request.GET.get('mes'))
-    desde, hasta = M.rango_mes(anio, mes)
+    anio, q = _leer_trimestre(request.GET.get('trimestre'))
+    desde, hasta = M.rango_trimestre(anio, q)
     hoy = timezone.localdate()
 
     items = list(ItemMeta.objects.filter(activo=True))
@@ -1216,43 +1419,57 @@ def matriz_equipo(request):
                           .select_related('funcionario', 'registrada_por'))
 
     equipo = []
-    por_item = {i.pk: {'itemId': i.pk, 'item': i.nombre, 'puntos': 0, 'meta': 0.0} for i in items}
+    por_item = {i.pk: {'itemId': i.pk, 'item': i.nombre, 'puntos': 0, 'arrastre': 0.0, 'total': 0.0, 'meta': 0.0}
+                for i in items}
     for u in miembros:
         propias = [a for a in ausencias if a.funcionario_id == u.pk]
-        factor, filas = M.resumen_funcionario(u, anio, mes, items, propias)
+        factor, filas = M.resumen_funcionario(u, anio, q, items, propias)
         pts = sum(f['puntos'] for f in filas)
+        extra = sum(f['arrastre'] for f in filas)
         meta = sum(f['meta'] for f in filas)
-        valor = M.cumplimiento(pts, meta) if filas else 0
+        valor = M.cumplimiento(pts + extra, meta) if filas else 0
         for f in filas:
-            por_item[f['itemId']]['puntos'] += f['puntos']
-            por_item[f['itemId']]['meta'] += f['meta']
+            fila = por_item[f['itemId']]
+            fila['puntos'] += f['puntos']
+            fila['arrastre'] += f['arrastre']
+            fila['total'] += f['total']
+            fila['meta'] += f['meta']
         equipo.append({
             'id': u.pk, 'nombre': P.nombre_visible(u), 'cargo': u.perfil.rol.nombre,
             'disponibilidad': round(factor * 100),
             'diasAusente': M.dias_ausente(u, desde, hasta, propias),
             'ausenteHoy': any(a.desde <= hoy <= a.hasta for a in propias),
-            'puntos': pts, 'meta': round(meta, 1), 'cumplimiento': round(valor * 100),
+            'puntos': pts, 'arrastre': round(extra, 1), 'total': round(pts + extra, 1),
+            'meta': round(meta, 1), 'cumplimiento': round(valor * 100),
             'semaforo': M.semaforo(valor), 'items': filas,
             'felicitaciones': sum(1 for f in felicitaciones if f.funcionario_id == u.pk),
         })
 
     items_equipo = []
     for fila in por_item.values():
-        valor = M.cumplimiento(fila['puntos'], fila['meta'])
-        items_equipo.append({**fila, 'meta': round(fila['meta'], 1), 'cumplimiento': round(valor * 100),
+        valor = M.cumplimiento(fila['total'], fila['meta'])
+        items_equipo.append({**fila, 'arrastre': round(fila['arrastre'], 1), 'total': round(fila['total'], 1),
+                             'meta': round(fila['meta'], 1), 'cumplimiento': round(valor * 100),
                              'semaforo': M.semaforo(valor)})
 
     total_pts = sum(f['puntos'] for f in items_equipo)
+    total_arrastre = sum(f['arrastre'] for f in items_equipo)
     total_meta = sum(f['meta'] for f in items_equipo)
-    avance = M.cumplimiento(total_pts, total_meta) if items_equipo else 0
+    avance = M.cumplimiento(total_pts + total_arrastre, total_meta) if items_equipo else 0
     pcts = [m['cumplimiento'] for m in equipo]
     brecha = (max(pcts) - min(pcts)) if pcts else 0
     return JsonResponse({
         'delegacion': {'id': delegacion.pk, 'nombre': delegacion.nombre},
         'delegaciones': [{'id': d.pk, 'nombre': d.nombre} for d in delegaciones],
-        'mes': f'{anio:04d}-{mes:02d}',
+        'trimestre': f'{anio}-Q{q}',
+        'trimestreNombre': M.nombre_trimestre(anio, q),
+        'trimestreAnterior': M.nombre_trimestre(*M.trimestre_anterior(anio, q)),
+        'desde': desde.isoformat(), 'hasta': hasta.isoformat(),
+        'trimestres': trimestres_disponibles(),
         'grupo': {
-            'puntos': total_pts, 'meta': round(total_meta, 1), 'cumplimiento': round(avance * 100),
+            'puntos': total_pts, 'arrastre': round(total_arrastre, 1),
+            'total': round(total_pts + total_arrastre, 1),
+            'meta': round(total_meta, 1), 'cumplimiento': round(avance * 100),
             'semaforo': M.semaforo(avance), 'brecha': brecha,
             'equilibrado': bool(pcts) and brecha <= 30 and min(pcts) >= M.AMARILLO * 100,
             'conteo': {c: sum(1 for m in equipo if m['semaforo'] == c) for c in ('verde', 'amarillo', 'rojo')},

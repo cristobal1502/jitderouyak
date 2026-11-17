@@ -117,6 +117,22 @@
           <div class="field">
             <label for="aRut">RUT del vecino(a) <span class="opcional">opcional</span></label>
             <input type="text" id="aRut" inputmode="text" maxlength="12" placeholder="12.345.678-5" autocomplete="off" data-validar="rut">
+            <div class="rut-orgs" id="rutOrgs" aria-live="polite" hidden></div>
+          </div>
+        </div>
+
+        <div class="field-group-2">
+          <div class="field">
+            <label>La atención es para <span class="required">*</span></label>
+            <div class="segmented" role="radiogroup" aria-label="La atención es para">
+              <label><input type="radio" name="aBeneficiario" value="Persona natural" checked> Persona natural <small>un vecino o vecina</small></label>
+              <label><input type="radio" name="aBeneficiario" value="Organización"> Organización <small>junta de vecinos o agrupación</small></label>
+            </div>
+          </div>
+          <div class="field" id="campoOrganizacion" hidden>
+            <label for="aOrganizacion">Organización <span class="required">*</span></label>
+            <select id="aOrganizacion"></select>
+            <span class="field-hint">Organizaciones activas de la delegación elegida.</span>
           </div>
         </div>
 
@@ -133,11 +149,18 @@
           </div>
         </div>
 
-        <div class="field">
-          <label class="check-inline" for="aEsDelegado" style="margin-top:0;">
-            <input type="checkbox" id="aEsDelegado">
-            El solicitante es el propio Delegado (se registra como «Otra gestión», no como atención ciudadana)
-          </label>
+        <div class="field-group-2">
+          <div class="field">
+            <label for="aPlazo">Plazo del compromiso</label>
+            <input type="date" id="aPlazo">
+            <span class="field-hint">Si no se realiza antes de esta fecha, aparece como vencida en el tubo.</span>
+          </div>
+          <div class="field">
+            <label class="check-inline" for="aEsDelegado">
+              <input type="checkbox" id="aEsDelegado">
+              El solicitante es el propio Delegado (se registra como «Otra gestión», no como atención ciudadana)
+            </label>
+          </div>
         </div>
 
         <div class="field-group-2">
@@ -205,6 +228,7 @@
               <th>Vecino(a)</th>
               <th>Tipo / Sub atención</th>
               <th style="width:150px;">Ítem · Puntaje</th>
+              <th style="width:110px;">Tubo</th>
               <th>Descripción</th>
               <th>Delegación</th>
               <th>Responsable</th>

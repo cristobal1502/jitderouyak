@@ -10,16 +10,17 @@ Sistema de gestión territorial para delegaciones municipales (Django + MySQL). 
 - **Menú lateral contraíble** — un botón en la barra superior lo reduce a solo íconos (el nombre aparece al pasar el mouse); la preferencia se recuerda en el navegador.
 - **Recuperar contraseña** — solicitud de código por correo → **Validar código** (vigencia de 5 min, reenvío cada 30 s y 3 intentos, controlados por el servidor) → **Crear nueva contraseña** → retorno al login.
 - **Mi panel** — resumen de metas del período e historial de actividades.
-- **Agenda colectiva** — tubo de trabajo con filtros y seguimiento de compromisos.
-- **Ingreso de atención** — vecino(a), teléfono, tipo, sub atención, descripción, delegación, responsable y fecha. Reglas de la Matriz SGR:
+- **Agenda colectiva (tubo de trabajo)** — toda atención ingresada entra al tubo y avanza por etapas: Ingresado → Pendiente → En proceso → Realizado (las que pasan su plazo sin realizarse aparecen como Vencidas). Dos vistas: lista (con selector de etapa por fila) y tablero por columnas, donde las tarjetas se arrastran. Llevar una actividad a «Realizado» la marca como ejecutada y suma su punto.
+- **Ingreso de atención** — vecino(a), RUT (opcional), teléfono, si es para una persona natural o una organización, plazo del compromiso, tipo, sub atención, descripción, delegación, responsable y fecha. Reglas de la Matriz SGR:
   - Nombre y teléfono del vecino(a) son obligatorios (sin ellos no se guarda ni suma puntaje).
   - Si el solicitante es el propio Delegado, se guarda como «Otra gestión» y no como atención ciudadana (se marca a mano o se detecta por el nombre).
   - Máximo 7 actividades por funcionario en un mismo día.
   - Cierre semanal: lo de una semana se puede ingresar hasta el lunes siguiente; desde el martes queda cerrada.
   - Cada actividad lleva un ítem de la matriz y un estado: «En preparación» (correos, coordinar, invitar: no suma) o «Ejecutada» (suma 1 punto). Las de preparación se marcan después como ejecutadas.
-  - Tope de 120%: cuando un ítem llega al 120% de la meta del mes deja de sumar y se avisa cuáles ítems están más bajos.
-- **Matriz SGR (vista de equipo)** — avance grupal de la delegación por ítem y por funcionario, con semáforo (≥100% verde, 70–99% amarillo, <70% rojo) y medida de equilibrio. La meta mensual de cada ítem se define en Ítems y metas y se rebaja en proporción a los días hábiles de ausencia. Solo el Delegado registra ausencias (vacaciones, licencias, días libres) y felicitaciones, estas últimas con respaldo formal obligatorio.
-- **Organizaciones** — registro de juntas de vecinos y organizaciones funcionales (subfamilias: Adulto Mayor, Deportivas, Centros de Madres/Culturales/Juveniles, Comités), con estado «Verificado / Pendiente de revisión». Todos lo consultan; lo editan quienes tienen «Administrar catálogos» o «Gestionar organizaciones».
+  - Tope de 120%: cuando un ítem llega al 120% de la meta del trimestre deja de sumar y se avisa cuáles ítems están más bajos.
+  - Al escribir el RUT, si la persona es dirigente de alguna organización, se ofrece asociar la atención a esa organización (y se completa el nombre).
+- **Matriz SGR (vista de equipo)** — visor por trimestre (Q1 ene-mar … Q4 oct-dic). Avance grupal de la delegación por ítem y por funcionario, con semáforo (≥100% verde, 70–99% amarillo, <70% rojo) y medida de equilibrio. La meta trimestral de cada ítem se define en Ítems y metas y se rebaja en proporción a los días hábiles de ausencia. Lo logrado por sobre el 100% de un ítem al cerrar el trimestre pasa como sobrante al trimestre siguiente, en el mismo ítem y para la misma persona. Solo el Delegado registra ausencias (vacaciones, licencias, días libres) y felicitaciones, estas últimas con respaldo formal obligatorio.
+- **Organizaciones** — registro de juntas de vecinos y organizaciones funcionales, con su directiva (presidente, tesorero y secretario, cada uno con nombre y RUT válido; los tres RUT deben ser distintos) (subfamilias: Adulto Mayor, Deportivas, Centros de Madres/Culturales/Juveniles, Comités), con estado «Verificado / Pendiente de revisión». Todos lo consultan; lo editan quienes tienen «Administrar catálogos» o «Gestionar organizaciones».
 - **Búsqueda avanzada** — filtros sobre las atenciones (delegación, período, funcionario, tipo, sub atención, fechas y palabras clave), paginación en el servidor y exportación a Excel (.xlsx) y PDF (vista imprimible). Respeta el alcance del rol; exportar requiere el permiso «Exportar informes».
 - **Administración (CRUD)** — Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención y Sub atenciones.
 - **Configuraciones** — perfil, cambio de contraseña y preferencias de notificación.
@@ -49,7 +50,6 @@ El permiso nuevo «Gestionar organizaciones» permite editar el registro de orga
 
 > **Qué usa base de datos y qué sigue siendo maqueta**
 > - Con base de datos: Login y sesión, recuperación de contraseña, Administración (Delegaciones, Roles, Usuarios, Ítems y metas, Tipos de atención, Sub atenciones), Ingreso de atención, Búsqueda avanzada, Organizaciones y Configuraciones.
-> - Aún maqueta (contenido fijo en el HTML/JS): Agenda colectiva.
 > - Casos sociales se retiró de la aplicación (pantalla y API). Sus tablas `dashboard_casosocial` y `dashboard_gestionsocial` se conservan en la base para no perder datos.
 
 ## Cómo ejecutarlo

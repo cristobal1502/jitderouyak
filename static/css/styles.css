@@ -1514,8 +1514,151 @@ html.sidebar-collapsed .sidebar-foot{display:none;}
 .swal2-popup.swal-form textarea{min-height:58px;}
 .swal2-popup.swal-form .swal2-actions{margin-top:10px;}
 
+/* Organizaciones: formulario en 3 columnas y la directiva como tabla compacta */
+.modal.modal-lg.modal-xl{max-width:940px;}
+.crud-grid.crud-grid-3{grid-template-columns:repeat(3, minmax(0, 1fr));}
+fieldset.field.directiva{border:none; padding:0; margin:2px 0 6px; min-width:0;}
+fieldset.field.directiva legend{
+  font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; padding:0;
+}
+.directiva-grid{
+  display:grid;
+  grid-template-columns:120px minmax(0, 1.4fr) minmax(0, 1fr);
+  gap:6px 12px;
+  align-items:start;
+  background:var(--stripe);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:10px 12px 4px;
+}
+.directiva-head{font-size:11px; color:var(--ink-faint); letter-spacing:.02em;}
+.directiva-cargo{font-size:13px; font-weight:600; padding-top:9px;}
+.directiva-grid .field{margin-bottom:6px;}
+
+@media (max-width: 880px){
+  .crud-grid.crud-grid-3{grid-template-columns:repeat(2, minmax(0, 1fr));}
+}
 @media (max-width: 640px){
-  .crud-grid{grid-template-columns:1fr;}
+  .crud-grid, .crud-grid.crud-grid-3{grid-template-columns:1fr;}
+  .directiva-grid{grid-template-columns:1fr;}
+  .directiva-head{display:none;}
+  .directiva-cargo{padding-top:4px;}
   .crud-grid .checkbox-grid{grid-template-columns:1fr;}
   .swal2-popup.swal-form .field-group-2{grid-template-columns:1fr;}
 }
+
+/* Matriz por trimestre: sobrante recibido del trimestre anterior */
+.kpi-nota{font-size:11.5px; color:var(--ink-faint);}
+.goal-figures .arrastre{color:var(--sem-verde); font-size:12px;}
+
+/* Ingreso: organizaciones donde el RUT es dirigente */
+.rut-orgs{
+  margin-top:8px;
+  border:1px solid var(--sem-verde);
+  background:var(--sem-verde-soft);
+  border-radius:var(--radius);
+  padding:8px 10px;
+  font-size:12.5px;
+}
+.rut-orgs[hidden]{display:none;}
+.rut-orgs-titulo{margin:0 0 6px; font-weight:600; color:var(--sem-verde);}
+.rut-org{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:4px 0;}
+.rut-org + .rut-org{border-top:1px solid rgba(46,125,79,.2);}
+.rut-org .btn-table{background:var(--surface);}
+.field[hidden]{display:none;}
+.enlace-tubo{text-decoration:none;}
+
+/* ---------- Tubo de trabajo: vistas lista y tablero ---------- */
+.tubo-acciones{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+.tubo-acciones .btn-primary{display:inline-flex; align-items:center; gap:7px; text-decoration:none;}
+.vista-toggle{display:inline-flex; border:1px solid var(--border-strong); border-radius:var(--radius); overflow:hidden; background:var(--surface);}
+.vista-btn{
+  display:inline-flex; align-items:center; gap:6px;
+  border:none; background:transparent; color:var(--ink-soft);
+  padding:8px 13px; font-size:13px; font-weight:600; cursor:pointer;
+}
+.vista-btn + .vista-btn{border-left:1px solid var(--border-strong);}
+.vista-btn[aria-pressed="true"]{background:var(--red-primary); color:#fff;}
+.vista-btn:focus-visible{outline:none; box-shadow:inset 0 0 0 2px var(--red-soft-strong);}
+.filtro-texto{
+  border:1px solid var(--border-strong); border-radius:var(--radius);
+  padding:8px 10px; font-family:inherit; font-size:13px; color:var(--ink); background:var(--surface); min-width:240px;
+}
+.filtro-texto:focus, .filter-field select:focus{outline:none; border-color:var(--red-primary); box-shadow:0 0 0 3px var(--red-soft);}
+button.summary-cell{border:none; border-right:1px solid var(--border); background:transparent; font-family:inherit; cursor:pointer; color:inherit;}
+button.summary-cell:last-child{border-right:none;}
+button.summary-cell:hover{background:var(--stripe);}
+button.summary-cell.activo{background:var(--red-soft); box-shadow:inset 0 -3px 0 var(--red-primary);}
+.etapa-select{
+  border:1px solid var(--border-strong); border-radius:var(--radius);
+  padding:6px 8px; font-family:inherit; font-size:12.5px; background:var(--surface); color:var(--ink); width:100%;
+}
+.etapa-select.vencido{border-color:var(--red-dark); color:var(--red-dark); font-weight:600;}
+
+.tablero-ayuda{font-size:12.5px; color:var(--ink-faint); margin:0 0 12px;}
+.tubo-tablero{
+  display:grid;
+  grid-template-columns:repeat(5, minmax(210px, 1fr));
+  gap:12px;
+  overflow-x:auto;
+  padding-bottom:6px;
+  align-items:start;
+}
+.columna{
+  background:var(--stripe);
+  border:1px solid var(--border);
+  border-radius:6px;
+  display:flex;
+  flex-direction:column;
+  min-height:220px;
+}
+.columna header{display:flex; align-items:center; justify-content:space-between; padding:10px 12px 6px;}
+.columna h3{margin:0; font-size:13.5px; font-weight:700;}
+.columna .contador{font-family:var(--font-mono); font-size:12px; color:var(--ink-faint); background:var(--surface); border-radius:10px; padding:1px 8px;}
+.columna-vencida{background:var(--sem-rojo-soft); border-color:#EBC3C0;}
+.columna-vencida h3{color:var(--red-dark);}
+.columna-nota{margin:0 12px 4px; font-size:11px; color:var(--red-dark);}
+.columna-cuerpo{display:flex; flex-direction:column; gap:8px; padding:6px 8px 10px; flex:1; border-radius:0 0 6px 6px; transition:background .12s ease;}
+.columna-cuerpo.sobre{background:var(--red-soft); outline:2px dashed var(--red-primary); outline-offset:-4px;}
+.columna-vacia{font-size:12px; color:var(--ink-faint); text-align:center; margin:14px 0;}
+.tarjeta{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-left:3px solid var(--border-strong);
+  border-radius:var(--radius);
+  padding:9px 10px;
+  font-size:12.5px;
+  box-shadow:0 1px 2px rgba(36,22,21,.05);
+}
+.tarjeta[draggable="true"]{cursor:grab;}
+.tarjeta[draggable="true"]:focus-visible{outline:2px solid var(--red-primary); outline-offset:1px;}
+.tarjeta.arrastrando{opacity:.45;}
+.tarjeta.vencida{border-left-color:var(--red-dark);}
+.columna[data-columna="Realizado"] .tarjeta{border-left-color:var(--sem-verde);}
+.columna[data-columna="En proceso"] .tarjeta{border-left-color:var(--red-primary);}
+.tarjeta-top{display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px;}
+.tarjeta-quien{font-weight:600; font-size:13px; line-height:1.3;}
+.tarjeta-que{color:var(--ink-soft); margin-top:3px;}
+.tarjeta-pie{display:flex; justify-content:space-between; gap:8px; align-items:baseline; margin-top:6px; color:var(--ink-soft); font-size:11.5px; flex-wrap:wrap;}
+.tarjeta-pie .due-note{margin-top:0;}
+.tarjeta-etapa{margin-top:4px; font-size:11px; color:var(--red-dark); font-weight:600;}
+.tarjeta-mover{
+  margin-top:8px; width:100%;
+  border:1px solid var(--border); border-radius:var(--radius);
+  padding:4px 6px; font-family:inherit; font-size:11.5px; color:var(--ink-soft); background:var(--surface);
+}
+@media (max-width: 880px){
+  .tubo-tablero{grid-template-columns:repeat(5, 230px);}
+  .filtro-texto{min-width:0; width:100%;}
+}
+
+/* Directiva compacta: el borde verde ya indica que el dato está bien; solo se muestran errores */
+.directiva-grid .field-msg.ok{display:none;}
+.directiva-grid .field-msg{margin-top:2px; font-size:11px;}
+.directiva-grid .field input[type="text"]{padding:7px 10px;}
+.crud-grid.crud-grid-3 .field{margin-bottom:10px;}
+.crud-grid.crud-grid-3 .field-msg{margin-top:3px;}
+/* Modales: un poco más de alto útil para que quepan los mensajes de validación */
+.modal{max-height:94vh;}
+.modal-head{padding:14px 22px;}
+.modal-foot{padding-top:12px; padding-bottom:12px;}

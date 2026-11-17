@@ -21,6 +21,7 @@ const OPC_SUBCATEGORIAS = [
   'Comité de Vecinos, Allegados o Seguridad'
 ];
 const OPC_VERIFICACION = ['Pendiente de revisión', 'Verificado'];
+const CARGOS_DIRECTIVA = [['presidente', 'Presidente(a)'], ['tesorero', 'Tesorero(a)'], ['secretario', 'Secretario(a)']];
 
 // 'api' es el nombre de la entidad en la API; 'refApi' apunta a la entidad referenciada.
 const ENTIDADES = {
@@ -68,16 +69,16 @@ const ENTIDADES = {
 
   'items': {
     titulo: 'Ítems y metas',
-    subtitulo: 'Ítems de la matriz SGR y su meta mensual por funcionario (1 punto por actividad ejecutada)',
+    subtitulo: 'Ítems de la matriz SGR y su meta trimestral por funcionario (1 punto por actividad ejecutada)',
     api: 'items', nuevoLabel: 'Nuevo ítem', singular: 'ítem',
     campos: [
       { key: 'codigo', label: 'Código', tipo: 'texto', auto: true },
       { key: 'nombre', label: 'Nombre', tipo: 'texto', requerido: true },
       { key: 'descripcion', label: 'Descripción', tipo: 'textarea', requerido: true },
-      { key: 'metaMensual', label: 'Meta mensual (puntos por funcionario)', tipo: 'numero', min: 1, max: 500, requerido: true },
+      { key: 'metaTrimestral', label: 'Meta trimestral (puntos por funcionario)', tipo: 'numero', min: 1, max: 1500, requerido: true },
       { key: 'estado', label: 'Estado', tipo: 'estado' }
     ],
-    columnas: ['codigo', 'nombre', 'descripcion', 'metaMensual', 'estado']
+    columnas: ['codigo', 'nombre', 'descripcion', 'metaTrimestral', 'estado']
   },
 
   'tipos-atencion': {
@@ -118,12 +119,13 @@ const ENTIDADES = {
         activoSi: { key: 'tipo', valor: ORG_FUNCIONAL } },
       { key: 'delegacionId', label: 'Delegación', tipo: 'ref', refApi: 'delegaciones', requerido: true },
       { key: 'sector', label: 'Sector', tipo: 'texto', requerido: true },
-      { key: 'representante', label: 'Representante / presidente(a)', tipo: 'texto', validar: 'nombre' },
       { key: 'telefono', label: 'Teléfono de contacto', tipo: 'texto', validar: 'telefono' },
       { key: 'verificacion', label: 'Verificación', tipo: 'verificacion', opciones: OPC_VERIFICACION },
-      { key: 'estado', label: 'Estado', tipo: 'estado' }
+      { key: 'estado', label: 'Estado', tipo: 'estado' },
+      { key: 'directiva', label: 'Directiva', tipo: 'directiva', requerido: true }
     ],
-    columnas: ['codigo', 'nombre', 'tipo', 'subcategoria', 'delegacionId', 'sector', 'verificacion', 'estado'],
+    columnas: ['codigo', 'nombre', 'tipo', 'subcategoria', 'delegacionId', 'directiva', 'verificacion', 'estado'],
+    columnasModal: 3,  // formulario en tres columnas para que quepa sin barra de desplazamiento
     porDelegacion: true,  // respeta la delegación elegida en la barra superior
     // Filtro rápido junto al buscador: [etiqueta, función que decide si la fila se muestra]
     filtros: [
@@ -180,6 +182,18 @@ function mostrarAlerta(caso, ctx = {}){
     case 'sin_seleccion':
       return Swal.fire({ icon: 'error', title: 'Falta una selección',
         text: `Selecciona al menos una opción en «${etiqueta}».`, confirmButtonColor: BTN });
+
+    case 'rut_repetido':
+      return Swal.fire({ icon: 'error', title: 'RUT repetido en la directiva',
+        text: 'Presidente, tesorero y secretario deben ser personas distintas: sus RUT no se pueden repetir.', confirmButtonColor: BTN });
+
+    case 'rut_invalido':
+      return Swal.fire({ icon: 'error', title: 'RUT inválido',
+        text: `El RUT de «${etiqueta}» no es válido: revisa los números y el dígito verificador.`, confirmButtonColor: BTN });
+
+    case 'nombre_invalido':
+      return Swal.fire({ icon: 'error', title: 'Nombre inválido',
+        text: `Escribe un nombre en «${etiqueta}», no solo números o símbolos.`, confirmButtonColor: BTN });
 
     case 'numero_invalido':
       return Swal.fire({ icon: 'error', title: 'Número inválido',
@@ -259,13 +273,40 @@ function mostrarAlerta(caso, ctx = {}){
 }
 
 /** Traduce un error de la API al popup que corresponde. */
+// Los errores de la directiva llegan como 'directiva.<cargo>.<nombre|rut>'.
+function etiquetaCampo(clave){
+  const m = /^directiva\.(\w+)\.(nombre|rut)$/.exec(clave || '');
+  if(m){
+    const cargo = (CARGOS_DIRECTIVA.find(([k]) => k === m[1]) || [])[1] || m[1];
+    return { label: `${m[2] === 'rut' ? 'RUT' : 'Nombre'} ${cargo}`, id: `f_dir_${m[1]}_${m[2]}` };
+  }
+  return null;
+}
+
 function manejarError(err){
-  const campo = campoDe(err.campo) || { label: err.campo || '' };
+  const dir = etiquetaCampo(err.campo);
+  const campo = dir || campoDe(err.campo) || { label: err.campo || '' };
+  if(dir){
+    const el = document.getElementById(dir.id);
+    if(el){ el.classList.add('field-invalid'); el.focus(); }
+  }
   switch(err.error){
     case 'campo_vacio':
     case 'sin_seleccion':
     case 'correo_invalido':
     case 'telefono_invalido':
+    case 'rut_repetido':
+      return Swal.fire({ icon: 'error', title: 'RUT repetido en la directiva',
+        text: 'Presidente, tesorero y secretario deben ser personas distintas: sus RUT no se pueden repetir.', confirmButtonColor: BTN });
+
+    case 'rut_invalido':
+      return Swal.fire({ icon: 'error', title: 'RUT inválido',
+        text: `El RUT de «${etiqueta}» no es válido: revisa los números y el dígito verificador.`, confirmButtonColor: BTN });
+
+    case 'nombre_invalido':
+      return Swal.fire({ icon: 'error', title: 'Nombre inválido',
+        text: `Escribe un nombre en «${etiqueta}», no solo números o símbolos.`, confirmButtonColor: BTN });
+
     case 'numero_invalido':
     case 'duplicado':
     case 'referencia_invalida':
@@ -301,6 +342,8 @@ function valorLegible(campo, fila){
       return (v || []).map((id) => nombreRef(campo.refApi, id)).filter(Boolean);
     case 'multiopcion':
       return v || [];
+    case 'directiva':
+      return '';
     default:
       return v ?? '';
   }
@@ -310,6 +353,10 @@ function celdaHtml(campo, fila){
   const val = valorLegible(campo, fila);
   if(campo.tipo === 'estado'){
     return `<span class="badge ${val === 'Activo' ? 'activo' : 'inactivo'}"><span class="dot"></span>${esc(val)}</span>`;
+  }
+  if(campo.tipo === 'directiva'){
+    const p = (fila.directiva || {}).presidente || {};
+    return p.nombre ? `${esc(p.nombre)}<span class="due-note">Presidente(a) · ${esc(p.rut || 'sin RUT')}</span>` : '—';
   }
   if(campo.tipo === 'verificacion'){
     return `<span class="badge ${val === 'Verificado' ? 'aprobada' : 'pendiente'}"><span class="dot"></span>${esc(val)}</span>`;
@@ -325,7 +372,8 @@ function celdaHtml(campo, fila){
 }
 
 function textoFila(fila){
-  return CFG.columnas.map((k) => {
+  const extra = fila.directiva ? Object.values(fila.directiva).map((p) => `${p.nombre} ${p.rut}`).join(' ') : '';
+  return extra + ' ' + CFG.columnas.map((k) => {
     const v = valorLegible(campoDe(k), fila);
     return Array.isArray(v) ? v.join(' ') : v;
   }).join(' ');
@@ -435,6 +483,19 @@ function campoHtml(c, valor, esNuevo){
     case 'correo':
       control = `<input type="email" id="${id}" value="${esc(valor || '')}" autocomplete="off"${va}>`;
       break;
+    case 'directiva': {
+      const d = valor || {};
+      control = `<div class="directiva-grid" id="${id}">
+        <span class="directiva-head">Cargo</span><span class="directiva-head">Nombre *</span><span class="directiva-head">RUT *</span>
+        ${CARGOS_DIRECTIVA.map(([cargo, etiqueta]) => `
+          <span class="directiva-cargo">${etiqueta}</span>
+          <div class="field"><input type="text" id="f_dir_${cargo}_nombre" aria-label="Nombre ${etiqueta}" maxlength="150"
+            value="${esc((d[cargo] || {}).nombre || '')}" data-validar="nombre" data-requerido autocomplete="off"></div>
+          <div class="field"><input type="text" id="f_dir_${cargo}_rut" aria-label="RUT ${etiqueta}" maxlength="12"
+            placeholder="12.345.678-5" value="${esc((d[cargo] || {}).rut || '')}" data-validar="rut" data-requerido autocomplete="off"></div>`).join('')}
+      </div>`;
+      break;
+    }
     case 'numero':
       control = `<input type="number" id="${id}" value="${esc(valor ?? '')}" min="${c.min ?? ''}" max="${c.max ?? ''}" step="1"${va}>`;
       break;
@@ -445,7 +506,11 @@ function campoHtml(c, valor, esNuevo){
         : `<input type="text" id="${id}" value="${esc(valor || '')}" autocomplete="off"${va}>`;
   }
   // Los campos largos (descripciones y listas de casillas) ocupan las dos columnas del modal.
-  const ancho = ['textarea', 'multiref', 'multiopcion'].includes(c.tipo) ? ' ancho-completo' : '';
+  const ancho = ['textarea', 'multiref', 'multiopcion', 'directiva'].includes(c.tipo) ? ' ancho-completo' : '';
+  if(c.tipo === 'directiva'){
+    return `<fieldset class="field directiva${ancho}"><legend>${esc(c.label)}${req}
+      <span class="field-hint" style="display:inline;margin-left:6px;">Los tres RUT deben ser distintos</span></legend>${control}</fieldset>`;
+  }
   return `<div class="field${ancho}"><label for="${id}">${esc(c.label)}${req}</label>${control}</div>`;
 }
 
@@ -454,6 +519,8 @@ function abrirModal(id){
   const fila = editandoId ? filas.find((r) => r.id === editandoId) : null;
   modalTitle.textContent = fila ? `Editar ${CFG.singular}` : CFG.nuevoLabel;
 
+  crudForm.classList.toggle('crud-grid-3', CFG.columnasModal === 3);
+  modalOverlay.querySelector('.modal').classList.toggle('modal-xl', CFG.columnasModal === 3);
   crudForm.innerHTML = CFG.campos.map((c) => campoHtml(c, fila ? fila[c.key] : undefined, !fila)).join('');
   actualizarDependientes();
 
@@ -474,6 +541,29 @@ function actualizarDependientes(){
     if(label) label.innerHTML = esc(c.label) + (activo ? ' <span class="required">*</span>' : '');
   });
 }
+/* Directiva: avisa al instante si un RUT se repite entre presidente, tesorero y secretario.
+   Corre después de la validación general (validacion.js), por eso el setTimeout. */
+function revisarRutsRepetidos(){
+  const campos = CARGOS_DIRECTIVA.map(([cargo, etiqueta]) => [document.getElementById(`f_dir_${cargo}_rut`), etiqueta]);
+  if(!campos[0][0]) return;
+  campos.forEach(([el, etiqueta], i) => {
+    const valor = SGRValidar.limpiarRut(el.value);
+    const otro = campos.find(([o], j) => j < i && valor && SGRValidar.limpiarRut(o.value) === valor);
+    const msg = document.getElementById(`${el.id}-msg`);
+    if(otro && SGRValidar.esRutValido(el.value)){
+      el.classList.remove('field-valid');
+      el.classList.add('field-invalid');
+      if(msg){ msg.textContent = `Repetido: es el RUT del ${otro[1].toLowerCase()}`; msg.className = 'field-msg error'; }
+    }
+  });
+}
+document.addEventListener('input', (e) => {
+  if(e.target.id && e.target.id.startsWith('f_dir_')) setTimeout(revisarRutsRepetidos);
+});
+document.addEventListener('focusout', (e) => {
+  if(e.target.id && e.target.id.startsWith('f_dir_')) setTimeout(revisarRutsRepetidos);
+});
+
 crudForm.addEventListener('change', (e) => {
   if(CFG.campos.some((c) => c.activoSi && `f_${c.activoSi.key}` === e.target.id)) actualizarDependientes();
 });
@@ -494,6 +584,12 @@ function leerFormulario(){
       case 'multiopcion':
         datos[c.key] = [...crudForm.querySelectorAll(`input[name="${c.key}"]:checked`)].map((i) => i.value);
         break;
+      case 'directiva':
+        datos[c.key] = Object.fromEntries(CARGOS_DIRECTIVA.map(([cargo]) => [cargo, {
+          nombre: document.getElementById(`f_dir_${cargo}_nombre`).value.trim(),
+          rut: document.getElementById(`f_dir_${cargo}_rut`).value.trim()
+        }]));
+        break;
       case 'ref': {
         const v = document.getElementById(`f_${c.key}`).value;
         datos[c.key] = v ? Number(v) : null;
@@ -511,6 +607,12 @@ function leerFormulario(){
 function validar(datos){
   for(const c of CFG.campos){
     const v = datos[c.key];
+    if(c.tipo === 'directiva'){
+      // RUT repetidos dentro de la misma directiva
+      const ruts = CARGOS_DIRECTIVA.map(([cargo]) => SGRValidar.limpiarRut(v[cargo].rut)).filter(Boolean);
+      if(new Set(ruts).size !== ruts.length) return { caso: 'rut_repetido', campo: c };
+      continue;
+    }
     const esLista = Array.isArray(v);
     const vacio = esLista ? v.length === 0 : (v === null || v === '');
 
@@ -528,7 +630,9 @@ saveBtn.addEventListener('click', async () => {
   if(guardando) return;
   const campoMalo = SGRValidar.validarTodo(crudForm);
   if(campoMalo){
-    const campo = campoDe(campoMalo.id.replace(/^f_/, '')) || { label: '' };
+    const dirMatch = /^f_dir_(\w+)_(nombre|rut)$/.exec(campoMalo.id);
+    const campo = (dirMatch && etiquetaCampo(`directiva.${dirMatch[1]}.${dirMatch[2]}`))
+      || campoDe(campoMalo.id.replace(/^f_/, '')) || { label: '' };
     Swal.fire({ icon: 'error', title: `Revisa «${campo.label}»`,
       text: (document.getElementById(`${campoMalo.id}-msg`) || {}).textContent || 'El dato no es válido.', confirmButtonColor: BTN })
       .then(() => campoMalo.focus());

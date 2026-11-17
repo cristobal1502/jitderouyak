@@ -116,12 +116,12 @@
       {% elif perfil_dashboard == 'supervisor' %}
       <div class="kpi-cell"><span class="kpi-label">Delegaciones a cargo</span><span class="kpi-value">{{ delegaciones_a_cargo }}</span></div>
       <div class="kpi-cell"><span class="kpi-label">Atenciones del mes ({{ mes_actual }})</span><span class="kpi-value">{{ atenciones_mes }}</span></div>
-      <div class="kpi-cell"><span class="kpi-label">Puntos del mes</span><span class="kpi-value">{{ puntos_mes }}</span></div>
+      <div class="kpi-cell"><span class="kpi-label">Puntos del trimestre ({{ trimestre_actual }})</span><span class="kpi-value">{{ puntos_trimestre }}</span></div>
       <div class="kpi-cell"><span class="kpi-label">Organizaciones por verificar</span><span class="kpi-value">{{ organizaciones_pendientes }}</span></div>
       {% else %}
       <div class="kpi-cell"><span class="kpi-label">Mis atenciones</span><span class="kpi-value">{{ total_atenciones }}</span></div>
       <div class="kpi-cell"><span class="kpi-label">Últimos 7 días</span><span class="kpi-value">{{ atenciones_semana }}</span></div>
-      <div class="kpi-cell"><span class="kpi-label">Mis puntos del mes</span><span class="kpi-value">{{ puntos_mes }}</span></div>
+      <div class="kpi-cell"><span class="kpi-label">Mis puntos ({{ trimestre_actual }})</span><span class="kpi-value">{{ puntos_trimestre }}</span></div>
       <div class="kpi-cell"><span class="kpi-label">En preparación</span><span class="kpi-value">{{ en_preparacion }}</span></div>
       {% endif %}
     </div>

@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SGR Municipal — Agenda colectiva</title>
+<title>SGR Municipal — Tubo de trabajo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/styles.css">
 <script>try{if(localStorage.getItem('sgr.menu')==='contraido')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
 </head>
-<body>
+<body data-api="{% url 'api_raiz' %}" data-csrf="{{ csrf_token }}" data-login-url="{% url 'login' %}">
 
 <header class="topbar">
   <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-controls="menuLateral" aria-expanded="true" aria-label="Contraer menú">
@@ -102,207 +102,100 @@
     <div class="page-heading">
       <div>
         <h1>Agenda colectiva <span class="heading-sub">(Tubo de trabajo)</span></h1>
-        <div class="subtitle">Seguimiento de compromisos territoriales y derivaciones de la delegación</div>
+        <div class="subtitle">Cada atención ingresada entra al tubo y avanza por etapas hasta «Realizado», donde suma su punto</div>
       </div>
-      <button class="btn-primary" id="openModalBtn">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-        Nuevo compromiso
-      </button>
+      <div class="tubo-acciones">
+        <div class="vista-toggle" role="group" aria-label="Forma de ver el tubo">
+          <button type="button" class="vista-btn" data-vista="lista" aria-pressed="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            Lista
+          </button>
+          <button type="button" class="vista-btn" data-vista="tablero" aria-pressed="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="7" rx="1"/></svg>
+            Tablero
+          </button>
+        </div>
+        {% if sgr_puede_registrar %}
+        <a class="btn-primary" href="{% url 'ingreso_atencion' %}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          Nueva atención
+        </a>
+        {% endif %}
+      </div>
     </div>
 
     <div class="section">
-      <div class="section-head">
-        <h2>Filtros rápidos</h2>
-      </div>
       <div class="filters-bar">
         <div class="filter-field">
-          <label for="filtroTerritorio">Territorio</label>
-          <select id="filtroTerritorio">
-            <option value="">Todos</option>
-            <option value="Las Compañías">Las Compañías</option>
-            <option value="Centro Histórico">Centro Histórico</option>
-            <option value="El Milagro">El Milagro</option>
-            <option value="La Pampa">La Pampa</option>
-          </select>
+          <label for="filtroDelegacion">Delegación</label>
+          <select id="filtroDelegacion"><option value="">Todas</option></select>
         </div>
         <div class="filter-field">
           <label for="filtroResponsable">Responsable</label>
-          <select id="filtroResponsable">
-            <option value="">Todos</option>
-            <option value="J. Pérez">Juan Pérez (Mío)</option>
-            <option value="C. Tapia">C. Tapia</option>
-            <option value="M. Rojas">M. Rojas</option>
-          </select>
+          <select id="filtroResponsable"><option value="">Todos</option></select>
         </div>
         <div class="filter-field">
-          <label for="filtroEstado">Estado</label>
-          <select id="filtroEstado">
-            <option value="">Todos</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="en-proceso">En proceso</option>
-            <option value="vencido">Vencido</option>
-            <option value="realizado">Realizado</option>
+          <label for="filtroEtapa">Etapa</label>
+          <select id="filtroEtapa">
+            <option value="">Todas</option>
+            <option>Ingresado</option>
+            <option>Pendiente</option>
+            <option>En proceso</option>
+            <option>Realizado</option>
+            <option value="Vencido">Vencidas</option>
           </select>
         </div>
-        <label class="checkbox-block filter-checkbox">
-          <input type="checkbox" id="filtroVencidos">
-          Solo vencidos / alerta
-        </label>
+        <div class="filter-field filter-field-grow">
+          <label for="filtroTexto">Buscar</label>
+          <input type="text" id="filtroTexto" class="filtro-texto" placeholder="Código, vecino(a), organización, descripción…" maxlength="100">
+        </div>
       </div>
     </div>
 
     <div class="section">
       <div class="section-head">
-        <h2>Resumen de compromisos</h2>
-        <span class="meta">RF-021</span>
+        <h2>Resumen del tubo</h2>
+        <span class="meta">Haz clic en una etapa para filtrar</span>
       </div>
-      <div class="summary-strip">
-        <div class="summary-cell">
-          <span class="summary-value">18</span>
-          <span class="summary-label">Total</span>
-        </div>
-        <div class="summary-cell">
-          <span class="summary-value">3</span>
-          <span class="summary-label">Ingresados</span>
-        </div>
-        <div class="summary-cell">
-          <span class="summary-value">5</span>
-          <span class="summary-label">Pendientes</span>
-        </div>
-        <div class="summary-cell">
-          <span class="summary-value">6</span>
-          <span class="summary-label">En proceso</span>
-        </div>
-        <div class="summary-cell">
-          <span class="summary-value">4</span>
-          <span class="summary-label">Realizados</span>
-        </div>
-        <div class="summary-cell alert">
-          <span class="summary-value">2</span>
-          <span class="summary-label">Vencidos</span>
-        </div>
+      <div class="summary-strip" id="resumen">
+        <button type="button" class="summary-cell" data-etapa=""><span class="summary-value" id="cTotal">0</span><span class="summary-label">Total</span></button>
+        <button type="button" class="summary-cell" data-etapa="Ingresado"><span class="summary-value" id="cIngresado">0</span><span class="summary-label">Ingresados</span></button>
+        <button type="button" class="summary-cell" data-etapa="Pendiente"><span class="summary-value" id="cPendiente">0</span><span class="summary-label">Pendientes</span></button>
+        <button type="button" class="summary-cell" data-etapa="En proceso"><span class="summary-value" id="cEnProceso">0</span><span class="summary-label">En proceso</span></button>
+        <button type="button" class="summary-cell" data-etapa="Realizado"><span class="summary-value" id="cRealizado">0</span><span class="summary-label">Realizados</span></button>
+        <button type="button" class="summary-cell alert" data-etapa="Vencido"><span class="summary-value" id="cVencido">0</span><span class="summary-label">Vencidos</span></button>
       </div>
     </div>
 
-    <div class="section">
-      <table class="history-table agenda-table" id="agendaTable">
-        <thead>
-          <tr>
-            <th style="width:90px;">ID</th>
-            <th>Territorio</th>
-            <th>Solicitante</th>
-            <th>Descripción compromiso</th>
-            <th style="width:100px;">Responsable</th>
-            <th style="width:110px;">F. límite</th>
-            <th style="width:120px;">Estado</th>
-            <th style="width:90px;">Acción</th>
-          </tr>
-        </thead>
-        <tbody id="agendaBody">
-          <tr data-territorio="Las Compañías" data-responsable="J. Pérez" data-estado="en-proceso">
-            <td class="code-cell">CMP-042</td>
-            <td>Las Compañías</td>
-            <td>JJVV N°14 Renacer</td>
-            <td>Operativo retiro de escombros</td>
-            <td>J. Pérez</td>
-            <td>
-              16/09/2026
-              <span class="due-note">Quedan 2d</span>
-            </td>
-            <td><span class="badge en-proceso"><span class="dot"></span>En proceso</span></td>
-            <td><button class="btn-table">Editar</button></td>
-          </tr>
-          <tr data-territorio="Centro Histórico" data-responsable="C. Tapia" data-estado="vencido">
-            <td class="code-cell">CMP-039</td>
-            <td>Centro Histórico</td>
-            <td>Junta Vecinal 2</td>
-            <td>Revisión luminarias peatonales</td>
-            <td>C. Tapia</td>
-            <td>
-              10/09/2026
-              <span class="due-note vencido">-4 días</span>
-            </td>
-            <td><span class="badge vencido"><span class="dot"></span>⚠ Vencido</span></td>
-            <td><button class="btn-table">Reasignar</button></td>
-          </tr>
-          <tr data-territorio="El Milagro" data-responsable="J. Pérez" data-estado="pendiente">
-            <td class="code-cell">CMP-031</td>
-            <td>El Milagro</td>
-            <td>Comité La Florida</td>
-            <td>Entrega mediación comunitaria</td>
-            <td>J. Pérez</td>
-            <td>18/09/2026</td>
-            <td><span class="badge pendiente"><span class="dot"></span>Pendiente</span></td>
-            <td><button class="btn-table">Editar</button></td>
-          </tr>
-          <tr data-territorio="La Pampa" data-responsable="M. Rojas" data-estado="realizado">
-            <td class="code-cell">CMP-028</td>
-            <td>La Pampa</td>
-            <td>Dirigente Vecinal</td>
-            <td>Asistencia técnica social</td>
-            <td>M. Rojas</td>
-            <td>05/09/2026</td>
-            <td><span class="badge realizado"><span class="dot"></span>Realizado</span></td>
-            <td><button class="btn-table">Ver</button></td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="empty-state" id="emptyState" style="display:none;">No hay compromisos que coincidan con los filtros seleccionados.</p>
+    <div class="section" id="vistaLista">
+      <div class="table-scroll">
+        <table class="history-table agenda-table">
+          <thead>
+            <tr>
+              <th style="width:80px;">Código</th>
+              <th>Vecino(a) / organización</th>
+              <th>Atención</th>
+              <th style="width:130px;">Responsable</th>
+              <th style="width:110px;">Plazo</th>
+              <th style="width:170px;">Etapa</th>
+            </tr>
+          </thead>
+          <tbody id="listaBody"></tbody>
+        </table>
+      </div>
     </div>
+
+    <div class="section" id="vistaTablero" hidden>
+      <p class="tablero-ayuda" id="tableroAyuda">Arrastra una tarjeta a otra columna para cambiar su etapa. Al llevarla a «Realizado» queda ejecutada y suma su punto.</p>
+      <div class="tubo-tablero" id="tablero"></div>
+    </div>
+
+    <p class="empty-state" id="emptyState" style="display:none;">No hay actividades en el tubo con estos filtros.</p>
   </main>
 </div>
 
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal">
-    <div class="modal-head">
-      <h3>Nuevo compromiso</h3>
-      <button class="modal-close" id="closeModalBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <form id="compromisoForm">
-        <div class="field">
-          <label for="cTerritorio">Territorio <span class="required">*</span></label>
-          <select id="cTerritorio">
-            <option value="Las Compañías">Las Compañías</option>
-            <option value="Centro Histórico">Centro Histórico</option>
-            <option value="El Milagro">El Milagro</option>
-            <option value="La Pampa">La Pampa</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="cSolicitante">Solicitante <span class="required">*</span></label>
-          <input type="text" id="cSolicitante" placeholder="Ej: JJVV N°14 Renacer">
-        </div>
-        <div class="field">
-          <label for="cDescripcion">Descripción del compromiso <span class="required">*</span></label>
-          <textarea id="cDescripcion" placeholder="Describe el compromiso u operativo a realizar"></textarea>
-        </div>
-        <div class="field-group-2">
-          <div class="field">
-            <label for="cResponsable">Responsable <span class="required">*</span></label>
-            <select id="cResponsable">
-              <option value="J. Pérez">Juan Pérez</option>
-              <option value="C. Tapia">C. Tapia</option>
-              <option value="M. Rojas">M. Rojas</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="cFechaLimite">Fecha límite <span class="required">*</span></label>
-            <input type="date" id="cFechaLimite">
-          </div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-foot">
-      <button class="btn-secondary" id="cancelModalBtn">Cancelar</button>
-      <button class="btn-primary" id="saveCompromisoBtn">Guardar compromiso</button>
-    </div>
-  </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/static/js/api.js"></script>
 <script src="/static/js/agenda.js"></script>
 <script src="/static/js/layout.js"></script>
 <script src="/static/js/validacion.js"></script>

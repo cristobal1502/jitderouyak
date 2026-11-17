@@ -9,7 +9,7 @@
   const $ = (id) => document.getElementById(id);
 
   const fDelegacion = $('mDelegacion');
-  const fMes = $('mMes');
+  const fTrimestre = $('mTrimestre');
   const ausenciaBtn = $('ausenciaBtn');
   const felicitacionBtn = $('felicitacionBtn');
 
@@ -25,7 +25,7 @@
     const p = new URLSearchParams();
     const delegacion = fDelegacion.value || SGR.delegacionActiva();  // la primera vez: la elegida arriba
     if(delegacion) p.set('delegacion', delegacion);
-    if(fMes.value) p.set('mes', fMes.value);
+    if(fTrimestre.value) p.set('trimestre', fTrimestre.value);
     try {
       datos = await SGR.get('matriz/?' + p.toString());
     } catch(err) {
@@ -44,12 +44,16 @@
       fDelegacion.innerHTML = datos.delegaciones.map((d) => `<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
     }
     fDelegacion.value = String(datos.delegacion.id);
-    fMes.value = datos.mes;
+    fTrimestre.innerHTML = datos.trimestres.map((t) =>
+      `<option value="${t.valor}">${esc(t.nombre)} (${SGR.formatearFecha(t.desde).slice(0, 5)} – ${SGR.formatearFecha(t.hasta).slice(0, 5)})</option>`).join('');
+    fTrimestre.value = datos.trimestre;
     ausenciaBtn.hidden = felicitacionBtn.hidden = !datos.puedeGestionar;
 
     const g = datos.grupo;
     $('kAvance').innerHTML = sem(g.semaforo, `${g.cumplimiento}%`);
-    $('kPuntos').textContent = `${g.puntos} / ${g.meta}`;
+    $('kPuntos').textContent = `${g.total} / ${g.meta}`;
+    $('kArrastre').textContent = g.arrastre
+      ? `incluye ${g.arrastre} de sobrante del ${datos.trimestreAnterior}` : '';
     $('kSemaforo').innerHTML = ['verde', 'amarillo', 'rojo']
       .map((c) => `${sem(c, String(g.conteo[c]))}`).join(' ');
     $('kEquilibrio').innerHTML = datos.equipo.length
@@ -60,7 +64,7 @@
     $('itemsEquipo').innerHTML = datos.items.length ? datos.items.map((i) => `
       <div class="goal-row">
         <div class="goal-top"><span class="goal-name">${esc(i.item)}</span>
-          <span class="goal-figures"><b>${i.puntos}</b> / ${i.meta} pts · ${sem(i.semaforo, i.cumplimiento + '%')}</span></div>
+          <span class="goal-figures"><b>${i.total}</b> / ${i.meta} pts${i.arrastre ? ` <span class="arrastre">(${i.puntos} + ${i.arrastre} sobrante)</span>` : ''} · ${sem(i.semaforo, i.cumplimiento + '%')}</span></div>
         <div class="meta-track"><div class="meta-fill ${i.semaforo}" style="width:${ancho(i.cumplimiento)}%"></div></div>
         <div class="meta-escala"><span>0%</span><span>100%</span><span>${datos.tope}%</span></div>
       </div>`).join('') : '<div class="empty-state">No hay ítems activos. Créalos en Administración → Ítems y metas.</div>';
@@ -75,8 +79,8 @@
           ${m.ausenteHoy ? '<span class="chip-ausente">Ausente hoy</span>' : ''}
           ${m.felicitaciones ? `<span class="chip">★ ${m.felicitaciones} felicitación${m.felicitaciones === 1 ? '' : 'es'}</span>` : ''}</td>
         ${m.items.map((c) => `<td class="celda-item">${sem(c.semaforo, c.cumplimiento + '%')}
-          <small>${c.puntos} / ${c.meta}${c.enTope ? ' · tope' : ''}</small></td>`).join('')}
-        <td class="celda-item">${sem(m.semaforo, m.cumplimiento + '%')}<small>${m.puntos} / ${m.meta}</small></td>
+          <small>${c.total} / ${c.meta}${c.arrastre ? ` · +${c.arrastre} sobr.` : ''}${c.enTope ? ' · tope' : ''}</small></td>`).join('')}
+        <td class="celda-item">${sem(m.semaforo, m.cumplimiento + '%')}<small>${m.total} / ${m.meta}</small></td>
         <td class="celda-item">${m.disponibilidad}%<small>${m.diasAusente} día${m.diasAusente === 1 ? '' : 's'} ausente</small></td>
       </tr>`).join('');
     $('equipoVacio').style.display = datos.equipo.length ? 'none' : 'block';
@@ -87,7 +91,7 @@
         <div class="linea1"><span>${esc(a.funcionario)}</span><span>${esc(a.tipo)}</span></div>
         <div class="linea3">${SGR.formatearFecha(a.desde)} – ${SGR.formatearFecha(a.hasta)}${a.observacion ? ' · ' + esc(a.observacion) : ''}</div>
         ${datos.puedeGestionar ? `<button type="button" class="btn-table danger" data-borrar-ausencia="${a.id}" style="margin-top:8px;">Eliminar</button>` : ''}
-      </li>`).join('') : '<li class="vacio">Sin ausencias registradas en el mes.</li>';
+      </li>`).join('') : '<li class="vacio">Sin ausencias registradas en el trimestre.</li>';
 
     // Felicitaciones
     $('listaFelicitaciones').innerHTML = datos.felicitaciones.length ? datos.felicitaciones.map((f) => `
@@ -95,11 +99,11 @@
         <div class="linea1"><span>${esc(f.funcionario)}</span><span>${SGR.formatearFecha(f.fecha)}</span></div>
         <div class="linea2">${esc(f.motivo)} — <i>${esc(f.emisor)}</i></div>
         <div class="linea3">Respaldo: ${esc(f.respaldoTipo)} · ${esc(f.respaldoReferencia)}</div>
-      </li>`).join('') : '<li class="vacio">Sin felicitaciones registradas en el mes.</li>';
+      </li>`).join('') : '<li class="vacio">Sin felicitaciones registradas en el trimestre.</li>';
   }
 
   fDelegacion.addEventListener('change', cargar);
-  fMes.addEventListener('change', cargar);
+  fTrimestre.addEventListener('change', cargar);
 
   /* ---------- Errores de los formularios ---------- */
   const TEXTOS = {
@@ -156,7 +160,7 @@
     try {
       await SGR.post('ausencias/', res.value);
       await cargar();
-      Swal.fire({ icon: 'success', title: 'Ausencia registrada', text: 'La meta del mes se ajustó automáticamente.', timer: 1800, showConfirmButton: false });
+      Swal.fire({ icon: 'success', title: 'Ausencia registrada', text: 'La meta del trimestre se ajustó automáticamente.', timer: 1800, showConfirmButton: false });
     } catch(err) { errorFormulario(err); }
   });
 

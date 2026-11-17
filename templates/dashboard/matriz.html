@@ -102,7 +102,7 @@
     <div class="page-heading">
       <div>
         <h1>Matriz SGR · vista de equipo</h1>
-        <div class="subtitle">Avance grupal y equilibrado de la delegación: 1 punto por actividad ejecutada, tope de 120% por ítem</div>
+        <div class="subtitle">Avance grupal y equilibrado de la delegación por trimestre: 1 punto por actividad ejecutada, tope de 120% por ítem y el sobrante pasa al trimestre siguiente</div>
       </div>
     </div>
 
@@ -112,8 +112,8 @@
         <select id="mDelegacion"></select>
       </div>
       <div class="filter-field">
-        <label for="mMes">Mes</label>
-        <input type="month" id="mMes">
+        <label for="mTrimestre">Período (trimestre)</label>
+        <select id="mTrimestre"></select>
       </div>
       <div class="spacer"></div>
       <div class="acciones">
@@ -124,7 +124,7 @@
 
     <div class="kpi-strip" id="kpis">
       <div class="kpi-cell"><span class="kpi-label">Avance grupal</span><span class="kpi-value" id="kAvance">—</span></div>
-      <div class="kpi-cell"><span class="kpi-label">Puntos / meta del equipo</span><span class="kpi-value" id="kPuntos">—</span></div>
+      <div class="kpi-cell"><span class="kpi-label">Puntos / meta del equipo</span><span class="kpi-value" id="kPuntos">—</span><span class="kpi-nota" id="kArrastre"></span></div>
       <div class="kpi-cell"><span class="kpi-label">Semáforo del equipo</span><span class="kpi-value" id="kSemaforo" style="font-size:15px;">—</span></div>
       <div class="kpi-cell"><span class="kpi-label">Equilibrio</span><span class="kpi-value" id="kEquilibrio" style="font-size:15px;">—</span></div>
     </div>
@@ -153,11 +153,11 @@
 
     <div class="dos-columnas">
       <div class="section">
-        <div class="section-head"><h2>Ausencias del mes</h2><span class="meta">Vacaciones, licencias y días libres</span></div>
+        <div class="section-head"><h2>Ausencias del trimestre</h2><span class="meta">Vacaciones, licencias y días libres</span></div>
         <ul class="lista-simple" id="listaAusencias"></ul>
       </div>
       <div class="section">
-        <div class="section-head"><h2>Felicitaciones del mes</h2><span class="meta">Solo con respaldo formal</span></div>
+        <div class="section-head"><h2>Felicitaciones del trimestre</h2><span class="meta">Solo con respaldo formal</span></div>
         <ul class="lista-simple" id="listaFelicitaciones"></ul>
       </div>
     </div>

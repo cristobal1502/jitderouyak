@@ -5,7 +5,7 @@
 
 Es idempotente: se puede ejecutar varias veces sin duplicar registros.
 """
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
@@ -82,22 +82,23 @@ USUARIOS_DEMO = [
     ('diego.vera', 'Diego Vera', 'diego.vera@municipalidad.cl', 'Administrativo', ['DEL-001'], True),
 ]
 
-# (código, nombre, tipo, subfamilia, delegación, sector, representante, teléfono, verificación)
+# (código, nombre, tipo, subfamilia, delegación, sector, teléfono, verificación,
+#  directiva: ((presidente, RUT), (tesorero, RUT), (secretario, RUT)))
 _T, _F = OrganizacionComunitaria.TERRITORIAL, OrganizacionComunitaria.FUNCIONAL
 _SUB = OrganizacionComunitaria.SUBCATEGORIAS
 ORGANIZACIONES_DEMO = [
-    ('ORG-001', 'Junta de Vecinos Villa El Faro', _T, '', 'DEL-001', 'Coquimbo Centro', 'Rosa Álvarez',
-     '+56 9 5555 1111', OrganizacionComunitaria.VERIFICADO),
-    ('ORG-002', 'Junta de Vecinos Las Compañías Norte', _T, '', 'DEL-002', 'Las Compañías', '', '',
-     OrganizacionComunitaria.PENDIENTE),
-    ('ORG-003', 'Club de Adulto Mayor Renacer', _F, _SUB[0], 'DEL-001', 'Coquimbo Oriente', 'Luis Cortés',
-     '+56 9 5555 2222', OrganizacionComunitaria.PENDIENTE),
-    ('ORG-004', 'Club Deportivo Tierras Blancas', _F, _SUB[1], 'DEL-003', 'Tierras Blancas', 'Pablo Rivera',
-     '+56 9 5555 3333', OrganizacionComunitaria.VERIFICADO),
-    ('ORG-005', 'Centro de Madres Esperanza', _F, _SUB[2], 'DEL-002', 'Las Compañías', 'Gloria Pizarro', '',
-     OrganizacionComunitaria.PENDIENTE),
-    ('ORG-006', 'Comité de Seguridad Pasaje Los Aromos', _F, _SUB[3], 'DEL-003', 'Tierras Blancas', '', '',
-     OrganizacionComunitaria.PENDIENTE),
+    ('ORG-001', 'Junta de Vecinos Villa El Faro', _T, '', 'DEL-001', 'Coquimbo Centro', '+56 9 5555 1111', OrganizacionComunitaria.VERIFICADO,
+     (('Rosa Álvarez', '10.234.567-3'), ('Pedro Contreras', '11.345.678-7'), ('Lucía Rivas', '12.456.789-0'))),
+    ('ORG-002', 'Junta de Vecinos Las Compañías Norte', _T, '', 'DEL-002', 'Las Compañías', '', OrganizacionComunitaria.PENDIENTE,
+     (('Hernán Gómez', '13.567.890-2'), ('Marta Salinas', '14.678.901-3'), ('Jorge Pizarro', '15.789.012-3'))),
+    ('ORG-003', 'Club de Adulto Mayor Renacer', _F, _SUB[0], 'DEL-001', 'Coquimbo Oriente', '+56 9 5555 2222', OrganizacionComunitaria.PENDIENTE,
+     (('Rosa Álvarez', '10.234.567-3'), ('Elena Vega', '17.901.234-0'), ('Raúl Torres', '18.012.345-8'))),
+    ('ORG-004', 'Club Deportivo Tierras Blancas', _F, _SUB[1], 'DEL-003', 'Tierras Blancas', '+56 9 5555 3333', OrganizacionComunitaria.VERIFICADO,
+     (('Pablo Rivera', '19.123.456-1'), ('Andrea Campos', '8.234.567-1'), ('Felipe Rojas', '9.345.678-5'))),
+    ('ORG-005', 'Centro de Madres Esperanza', _F, _SUB[2], 'DEL-002', 'Las Compañías', '', OrganizacionComunitaria.PENDIENTE,
+     (('Gloria Pizarro', '7.456.789-4'), ('Teresa Muñoz', '6.567.890-K'), ('Carmen Díaz', '5.678.901-4'))),
+    ('ORG-006', 'Comité de Seguridad Pasaje Los Aromos', _F, _SUB[3], 'DEL-003', 'Tierras Blancas', '', OrganizacionComunitaria.PENDIENTE,
+     (('Sergio Olivares', '21.789.012-8'), ('Daniela Fuentes', '22.890.123-7'), ('Tomás Araya', '23.901.234-5'))),
 ]
 
 
@@ -179,13 +180,17 @@ class Command(BaseCommand):
             for codigo, sol, tel, item, tipo, sub, desc, deleg, resp, fecha in demo:
                 Atencion.objects.get_or_create(codigo=codigo, defaults={
                     'item': ItemMeta.objects.get(codigo=item), 'estado': Atencion.EJECUTADA,
-                    'ejecutada_el': fecha, 'puntaje': 1,
+                    'ejecutada_el': fecha, 'puntaje': 1, 'etapa': Atencion.REALIZADO,
+                    'fecha_compromiso': fecha + timedelta(days=Atencion.PLAZO_DIAS),
                     'solicitante': sol, 'telefono': tel, 'tipo': tipos[tipo], 'subatencion': subs[sub], 'descripcion': desc,
                     'delegacion': dels[deleg], 'responsable': resp, 'fecha': fecha, 'creado_por': admin_user})
-            for codigo, nombre, tipo, sub, deleg, sector, rep, tel, verif in ORGANIZACIONES_DEMO:
+            for codigo, nombre, tipo, sub, deleg, sector, tel, verif, directiva in ORGANIZACIONES_DEMO:
+                (pn, pr), (tn, tr), (sn, sr) = directiva
                 OrganizacionComunitaria.objects.get_or_create(codigo=codigo, defaults={
                     'nombre': nombre, 'tipo': tipo, 'subcategoria': sub, 'delegacion': dels[deleg],
-                    'sector': sector, 'representante': rep, 'telefono': tel, 'verificacion': verif})
+                    'sector': sector, 'telefono': tel, 'verificacion': verif,
+                    'presidente_nombre': pn, 'presidente_rut': pr, 'tesorero_nombre': tn, 'tesorero_rut': tr,
+                    'secretario_nombre': sn, 'secretario_rut': sr})
             maria = User.objects.get(username='maria.rojas')
             Ausencia.objects.get_or_create(
                 funcionario=juan, desde=date(2026, 10, 19), defaults={

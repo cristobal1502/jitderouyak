@@ -10,6 +10,7 @@ from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils import timezone
 
+from . import matriz as M
 from . import permisos as P
 from .api import BUSQUEDA_MAX_EXPORTAR, ErrorApi, atenciones_visibles, filtrar_busqueda
 from .models import (
@@ -86,7 +87,9 @@ def contexto_dashboard(user, delegacion=None):
         'total_atenciones': total_aten,
         'atenciones_mes': atenciones.filter(fecha__gte=inicio_mes).count(),
         'atenciones_semana': atenciones.filter(fecha__gte=hoy - timedelta(days=6)).count(),
-        'puntos_mes': atenciones.filter(ejecutada_el__gte=inicio_mes).aggregate(t=Sum('puntaje'))['t'] or 0,
+        'puntos_trimestre': atenciones.filter(ejecutada_el__gte=M.rango_trimestre(*M.trimestre_de(hoy))[0])
+                            .aggregate(t=Sum('puntaje'))['t'] or 0,
+        'trimestre_actual': M.nombre_trimestre(*M.trimestre_de(hoy)),
         'en_preparacion': atenciones.filter(estado=Atencion.PREPARACION).count(),
         'total_organizaciones': organizaciones.count(),
         'organizaciones_pendientes': organizaciones.exclude(verificacion=OrganizacionComunitaria.VERIFICADO).count(),

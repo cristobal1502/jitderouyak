@@ -60,7 +60,7 @@ class ItemMeta(models.Model):
     codigo = models.CharField(max_length=20, unique=True)
     nombre = models.CharField(max_length=120)
     descripcion = models.TextField()
-    meta_mensual = models.PositiveSmallIntegerField(default=10)  # puntos esperados por funcionario al mes
+    meta_trimestral = models.PositiveSmallIntegerField(default=30)  # puntos esperados por funcionario en el trimestre
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -110,6 +110,14 @@ class Atencion(models.Model):
     PREPARACION = 'Preparación'     # tareas previas (correos, coordinar, invitar): se anotan, no suman
     EJECUTADA = 'Ejecutada'         # acción realizada: solo estas suman puntaje
     ESTADOS = [(PREPARACION, PREPARACION), (EJECUTADA, EJECUTADA)]
+    PERSONA = 'Persona natural'
+    ORGANIZACION = 'Organización'
+    BENEFICIARIOS = [(PERSONA, PERSONA), (ORGANIZACION, ORGANIZACION)]
+    # Etapas del tubo de trabajo. «Realizado» equivale a Ejecutada (suma puntaje).
+    # «Vencido» no se guarda: es una etapa no realizada cuyo plazo ya pasó.
+    INGRESADO, PENDIENTE, EN_PROCESO, REALIZADO = 'Ingresado', 'Pendiente', 'En proceso', 'Realizado'
+    ETAPAS = [(e, e) for e in (INGRESADO, PENDIENTE, EN_PROCESO, REALIZADO)]
+    PLAZO_DIAS = 7  # plazo por defecto del compromiso, desde la fecha de la actividad
 
     codigo = models.CharField(max_length=20, unique=True)
     solicitante = models.CharField(max_length=150)
@@ -121,6 +129,11 @@ class Atencion(models.Model):
     ejecutada_el = models.DateField(null=True, blank=True)  # fecha en que se realizó (define el mes del puntaje)
     puntaje = models.PositiveSmallIntegerField(default=0)    # 1 si sumó a la matriz, 0 si no
     tope_alcanzado = models.BooleanField(default=False)      # no sumó porque el ítem ya estaba en 120%
+    beneficiario = models.CharField(max_length=20, choices=BENEFICIARIOS, default=PERSONA)
+    organizacion = models.ForeignKey('OrganizacionComunitaria', on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name='atenciones')
+    etapa = models.CharField(max_length=20, choices=ETAPAS, default=INGRESADO)  # columna del tubo
+    fecha_compromiso = models.DateField(null=True, blank=True)  # plazo para cerrar el compromiso
     tipo = models.ForeignKey(TipoAtencion, on_delete=models.PROTECT, related_name='atenciones')
     subatencion = models.ForeignKey(SubAtencion, on_delete=models.PROTECT, related_name='atenciones')
     descripcion = models.TextField()
@@ -201,6 +214,7 @@ class OrganizacionComunitaria(models.Model):
         'Centro de Madres, Cultural o Agrupación Juvenil',
         'Comité de Vecinos, Allegados o Seguridad',
     ]
+    CARGOS = [('presidente', 'Presidente(a)'), ('tesorero', 'Tesorero(a)'), ('secretario', 'Secretario(a)')]
     VERIFICADO = 'Verificado'
     PENDIENTE = 'Pendiente de revisión'
     VERIFICACIONES = [(VERIFICADO, VERIFICADO), (PENDIENTE, PENDIENTE)]
@@ -211,7 +225,15 @@ class OrganizacionComunitaria(models.Model):
     subcategoria = models.CharField(max_length=60, blank=True, choices=[(s, s) for s in SUBCATEGORIAS])
     delegacion = models.ForeignKey(Delegacion, on_delete=models.PROTECT, related_name='organizaciones')
     sector = models.CharField(max_length=120)
-    representante = models.CharField(max_length=150, blank=True)
+    # Directiva: presidente, tesorero y secretario, cada uno con su RUT (12.345.678-9).
+    # Los tres RUT deben ser distintos dentro de la organización; una persona sí puede
+    # ser dirigente de dos organizaciones distintas.
+    presidente_nombre = models.CharField(max_length=150, blank=True)
+    presidente_rut = models.CharField(max_length=12, blank=True, db_index=True)
+    tesorero_nombre = models.CharField(max_length=150, blank=True)
+    tesorero_rut = models.CharField(max_length=12, blank=True, db_index=True)
+    secretario_nombre = models.CharField(max_length=150, blank=True)
+    secretario_rut = models.CharField(max_length=12, blank=True, db_index=True)
     telefono = models.CharField(max_length=30, blank=True)
     verificacion = models.CharField(max_length=30, choices=VERIFICACIONES, default=PENDIENTE)
     activo = models.BooleanField(default=True)

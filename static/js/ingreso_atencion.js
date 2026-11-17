@@ -15,6 +15,11 @@ const fSub = document.getElementById('aSub');
 const fDelegacion = document.getElementById('aDelegacion');
 const fResponsable = document.getElementById('aResponsable');
 const fDescripcion = document.getElementById('aDescripcion');
+const fOrganizacion = document.getElementById('aOrganizacion');
+const campoOrganizacion = document.getElementById('campoOrganizacion');
+const fPlazo = document.getElementById('aPlazo');
+const rutOrgs = document.getElementById('rutOrgs');
+const beneficiarioElegido = () => (document.querySelector('input[name="aBeneficiario"]:checked') || {}).value || 'Persona natural';
 const limpiarBtn = document.getElementById('limpiarBtn');
 const tablaBody = document.getElementById('tablaBody');
 const emptyState = document.getElementById('emptyState');
@@ -23,7 +28,8 @@ const contador = document.getElementById('contador');
 const hoy = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD en hora local
 
 /* Catálogos y atenciones vienen de la base de datos (API) */
-let opcionesApi = { tipos: [], subatenciones: [], items: [], delegaciones: [], responsables: [], fechaMinima: '', maxPorDia: 7 };
+let opcionesApi = { tipos: [], subatenciones: [], items: [], delegaciones: [], responsables: [], organizaciones: [],
+  fechaMinima: '', maxPorDia: 7, plazoDias: 7 };
 const telefonoValido = (t) => /^[0-9+()\s-]+$/.test(t) && t.replace(/\D/g, '').length >= 8 && t.replace(/\D/g, '').length <= 15;
 let atenciones = [];
 
@@ -66,9 +72,90 @@ function cargarResponsables(){
   fResponsable.disabled = usuarios.length === 0;
 }
 
+/* ---------- Persona natural u organización ---------- */
+function cargarOrganizaciones(){
+  const delId = Number(fDelegacion.value);
+  const actual = fOrganizacion.value;
+  const lista = opcionesApi.organizaciones.filter((o) => !delId || o.delegacionId === delId);
+  fOrganizacion.innerHTML = opciones(lista, lista.length ? 'Selecciona la organización…' : 'Esta delegación no tiene organizaciones activas');
+  if(lista.some((o) => String(o.id) === actual)) fOrganizacion.value = actual;
+}
+
+function mostrarCampoOrganizacion(){
+  const esOrg = beneficiarioElegido() === 'Organización';
+  campoOrganizacion.hidden = !esOrg;
+  if(esOrg) fOrganizacion.setAttribute('data-requerido', ''); else fOrganizacion.removeAttribute('data-requerido');
+}
+
+function elegirOrganizacion(org){
+  // Si la organización es de otra delegación del usuario, se cambia la delegación también.
+  if(org.delegacionId && String(org.delegacionId) !== fDelegacion.value &&
+     opcionesApi.delegaciones.some((d) => d.id === org.delegacionId)){
+    fDelegacion.value = String(org.delegacionId);
+    cargarResponsables();
+  }
+  cargarOrganizaciones();
+  document.querySelector('input[name="aBeneficiario"][value="Organización"]').checked = true;
+  mostrarCampoOrganizacion();
+  fOrganizacion.value = String(org.id);
+  SGRValidar.validarCampo(fOrganizacion, true);
+}
+
+/* ---------- RUT: ¿es dirigente de alguna organización? ---------- */
+let consultaRut = 0;
+async function buscarOrganizacionesPorRut(){
+  const rut = fRut.value.trim();
+  const turno = ++consultaRut;
+  if(!rut || !SGRValidar.esRutValido(rut)){ rutOrgs.hidden = true; rutOrgs.innerHTML = ''; return; }
+  let r;
+  try { r = await SGR.get(`organizaciones/por-rut/?rut=${encodeURIComponent(rut)}`); }
+  catch(err) { rutOrgs.hidden = true; return; }
+  if(turno !== consultaRut) return;  // llegó una respuesta vieja
+  if(!r.organizaciones.length){ rutOrgs.hidden = true; rutOrgs.innerHTML = ''; return; }
+  const nombre = r.organizaciones[0].personaNombre;
+  rutOrgs.innerHTML = `<p class="rut-orgs-titulo">${esc(nombre)} está registrado(a) en ${r.organizaciones.length === 1 ? 'una organización' : `${r.organizaciones.length} organizaciones`}:</p>` +
+    r.organizaciones.map((o) => `
+      <div class="rut-org">
+        <span><b>${esc(o.cargo)}</b> de ${esc(o.nombre)}<span class="due-note">${esc(o.delegacionNombre)} · ${esc(o.verificacion)}</span></span>
+        <button type="button" class="btn-table" data-org="${o.id}" data-delegacion="${o.delegacionId}">Atención para esta organización</button>
+      </div>`).join('');
+  rutOrgs.dataset.orgs = JSON.stringify(r.organizaciones);
+  rutOrgs.hidden = false;
+  if(!fSolicitante.value.trim() && nombre){
+    fSolicitante.value = nombre;  // completa el nombre con el de la directiva
+    SGRValidar.validarCampo(fSolicitante, true);
+  }
+}
+
 if(form){
   fTipo.addEventListener('change', cargarSubatenciones);
-  fDelegacion.addEventListener('change', cargarResponsables);
+  fDelegacion.addEventListener('change', () => { cargarResponsables(); cargarOrganizaciones(); });
+  form.querySelectorAll('input[name="aBeneficiario"]').forEach((r) => r.addEventListener('change', mostrarCampoOrganizacion));
+  let espera;
+  fRut.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(buscarOrganizacionesPorRut, 350); });
+  rutOrgs.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-org]');
+    if(!btn) return;
+    const org = JSON.parse(rutOrgs.dataset.orgs || '[]').find((o) => String(o.id) === btn.dataset.org);
+    if(!org) return;
+    if(!opcionesApi.organizaciones.some((o) => o.id === org.id)){
+      Swal.fire({ icon: 'info', title: 'Organización de otra delegación',
+        text: `${org.nombre} pertenece a ${org.delegacionNombre}, que no está entre tus delegaciones.`, confirmButtonColor: BTN });
+      return;
+    }
+    elegirOrganizacion({ id: org.id, delegacionId: org.delegacionId });
+  });
+  // El plazo sigue a la fecha de la actividad mientras no se cambie a mano.
+  fFecha.addEventListener('change', () => {
+    fPlazo.min = fFecha.value;
+    if(!fPlazo.dataset.manual && fFecha.value) fPlazo.value = sumarDias(fFecha.value, opcionesApi.plazoDias);
+  });
+  fPlazo.addEventListener('change', () => { fPlazo.dataset.manual = '1'; });
+}
+
+function sumarDias(iso, dias){
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10);
 }
 
 /* ---------- Alertas (un case por situación) ---------- */
@@ -109,12 +196,18 @@ function mostrarAlerta(caso, ctx = {}){
     case 'tipo_vacio':
       Swal.fire({ icon: 'error', title: 'Falta el tipo de atención', text: 'Selecciona el tipo de atención.', confirmButtonColor: BTN });
       marcar(fTipo); break;
+    case 'organizacion_vacia':
+      Swal.fire({ icon: 'error', title: 'Falta la organización', text: 'Elegiste que la atención es para una organización: selecciona cuál.', confirmButtonColor: BTN });
+      marcar(fOrganizacion); break;
+    case 'plazo_anterior':
+      Swal.fire({ icon: 'warning', title: 'Plazo no válido', text: 'El plazo del compromiso no puede ser anterior a la fecha de la actividad.', confirmButtonColor: BTN });
+      marcar(fPlazo); break;
     case 'item_vacio':
       Swal.fire({ icon: 'error', title: 'Falta el ítem', text: 'Selecciona el ítem de la matriz SGR al que corresponde la actividad.', confirmButtonColor: BTN });
       marcar(fItem); break;
     case 'tope':
       Swal.fire({ icon: 'warning', title: `«${ctx.alerta.item}» ya está en ${ctx.alerta.cumplimiento}%`,
-        html: `<p>La actividad <b>${esc(ctx.codigo)}</b> quedó registrada, pero <b>no suma puntaje</b>: el ítem superó el tope de 120% del mes.</p>` +
+        html: `<p>La actividad <b>${esc(ctx.codigo)}</b> quedó registrada, pero <b>no suma puntaje</b>: el ítem superó el tope de 120% del ${esc(ctx.alerta.trimestre || 'trimestre')}.</p>` +
           (ctx.alerta.sugeridos.length
             ? `<p style="margin-top:10px;">Enfócate en los ítems más bajos:</p><ul style="text-align:left;margin:8px auto 0;display:inline-block;">${
                 ctx.alerta.sugeridos.map((x) => `<li>${esc(x.item)} — ${x.cumplimiento}%</li>`).join('')}</ul>`
@@ -157,8 +250,9 @@ function mostrarAlerta(caso, ctx = {}){
       if(ctx.otraGestion) nota = ' Quedó como «Otra gestión» porque el solicitante es el Delegado: no suma puntaje.';
       else if(ctx.preparacion) nota = ' Quedó en preparación: sumará puntaje cuando la marques como ejecutada.';
       else if(ctx.puntaje) nota = ' Sumó 1 punto a la matriz.';
+      nota += ctx.preparacion ? ' Entró al tubo en «Ingresado».' : ' Quedó en el tubo como «Realizado».';
       Swal.fire({ icon: 'success', title: 'Atención registrada', text: `Se generó el código ${ctx.codigo}.${nota}`,
-        timer: nota && !ctx.puntaje ? 3400 : 1800, showConfirmButton: false });
+        timer: 3400, showConfirmButton: false });
       break;
     }
     default:
@@ -169,7 +263,8 @@ function mostrarAlerta(caso, ctx = {}){
 /** Traduce un error de la API al popup que corresponde. */
 const CASO_CAMPO_VACIO = {
   solicitante: 'solicitante_vacio', telefono: 'telefono_vacio', itemId: 'item_vacio', tipoId: 'tipo_vacio', subId: 'sub_vacia',
-  delegacionId: 'delegacion_vacia', responsableId: 'responsable_vacio', fecha: 'fecha_vacia'
+  delegacionId: 'delegacion_vacia', responsableId: 'responsable_vacio', fecha: 'fecha_vacia',
+  organizacionId: 'organizacion_vacia'
 };
 
 function manejarError(err){
@@ -191,6 +286,8 @@ function manejarError(err){
       return mostrarAlerta('limite_diario', { max: err.detalle });
     case 'ejecucion_anterior':
       return mostrarAlerta('ejecucion_anterior');
+    case 'plazo_anterior':
+      return mostrarAlerta('plazo_anterior');
     case 'ya_ejecutada':
       cargarAtenciones();
       return;
@@ -214,6 +311,11 @@ function motivoSinPuntaje(a){
   return '';
 }
 
+function badgeEtapa(a){
+  const clase = a.vencido ? 'vencido' : { 'Realizado': 'realizado', 'En proceso': 'en-proceso', 'Pendiente': 'pendiente' }[a.etapa] || 'aprobada';
+  return `<a class="enlace-tubo" href="/dashboard/agenda/" title="Ver en el tubo"><span class="badge ${clase}"><span class="dot"></span>${a.vencido ? 'Vencido' : esc(a.etapa)}</span></a>`;
+}
+
 function celdaPuntaje(a){
   const item = a.itemNombre ? esc(a.itemNombre) : '<span class="due-note">Sin ítem</span>';
   let estado;
@@ -232,10 +334,12 @@ function renderTabla(){
     <tr>
       <td class="code-cell">${esc(a.codigo)}</td>
       <td>${SGR.formatearFecha(a.fecha)}</td>
-      <td>${esc(a.solicitante)}${a.rut ? `<span class="due-note">${esc(a.rut)}</span>` : ''}${a.telefono ? `<span class="due-note">${esc(a.telefono)}</span>` : ''}${
+      <td>${esc(a.solicitante)}${a.rut ? `<span class="due-note">${esc(a.rut)}</span>` : ''}${
+        a.organizacionNombre ? `<span class="due-note">Para: ${esc(a.organizacionNombre)}</span>` : ''}${a.telefono ? `<span class="due-note">${esc(a.telefono)}</span>` : ''}${
         a.clasificacion === 'Otra gestión' ? '<br><span class="tag-otra-gestion">Otra gestión</span>' : ''}</td>
       <td>${esc(a.tipoNombre)}<span class="due-note">${esc(a.subNombre)}</span></td>
       <td>${celdaPuntaje(a)}</td>
+      <td>${badgeEtapa(a)}</td>
       <td>${esc(a.descripcion)}</td>
       <td>${esc(a.delegacionNombre)}</td>
       <td>${esc(a.responsableNombre)}</td>
@@ -290,6 +394,7 @@ async function recargarOpciones(){
   }
   cargarTipos();
   cargarDelegaciones();
+  cargarOrganizaciones();
   if(opcionesApi.fechaMinima){
     fFecha.min = opcionesApi.fechaMinima;
     fechaAyuda.textContent = `Puedes ingresar actividades desde el ${SGR.formatearFecha(opcionesApi.fechaMinima)}. ` +
@@ -303,10 +408,17 @@ function limpiar(){
   form.reset();
   form.querySelectorAll('.field-invalid').forEach((el) => el.classList.remove('field-invalid'));
   fFecha.value = hoy();
+  delete fPlazo.dataset.manual;
+  fPlazo.min = fFecha.value;
+  fPlazo.value = sumarDias(fFecha.value, opcionesApi.plazoDias || 7);
+  rutOrgs.hidden = true;
+  rutOrgs.innerHTML = '';
   const activa = SGR.delegacionActiva();  // la delegación elegida arriba queda preseleccionada
   if(activa && opcionesApi.delegaciones.some((d) => d.id === activa)) fDelegacion.value = String(activa);
   cargarSubatenciones();
   cargarResponsables();
+  cargarOrganizaciones();
+  mostrarCampoOrganizacion();
 }
 
 if(form){
@@ -345,6 +457,9 @@ if(form){
     if(!fFecha.value){ mostrarAlerta('fecha_vacia'); return; }
     if(fFecha.value > hoy()){ mostrarAlerta('fecha_futura'); return; }
     if(opcionesApi.fechaMinima && fFecha.value < opcionesApi.fechaMinima){ mostrarAlerta('semana_cerrada'); return; }
+    const beneficiario = beneficiarioElegido();
+    if(beneficiario === 'Organización' && !fOrganizacion.value){ mostrarAlerta('organizacion_vacia'); return; }
+    if(fPlazo.value && fPlazo.value < fFecha.value){ mostrarAlerta('plazo_anterior'); return; }
 
     enviando = true;
     try {
@@ -360,7 +475,10 @@ if(form){
         descripcion,
         delegacionId: Number(fDelegacion.value),
         responsableId: Number(fResponsable.value),
-        fecha: fFecha.value
+        fecha: fFecha.value,
+        beneficiario,
+        organizacionId: beneficiario === 'Organización' ? Number(fOrganizacion.value) : null,
+        fechaCompromiso: fPlazo.value || null
       });
       limpiar();
       await cargarAtenciones();
