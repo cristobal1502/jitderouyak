@@ -22,10 +22,29 @@ class Diagrama:
         alto = 50 if len(lineas) == 1 else 66
         self.cus[k] = (lineas, x, y, ancho / 2, alto / 2)
 
-    def asocia(self, a, c): self.rel.append(('asoc', a, c, None))
-    def incluye(self, base, incl, off=(0, 0)): self.rel.append(('include', base, incl, off))
-    def extiende(self, ext, base, off=(0, 0)): self.rel.append(('extend', ext, base, off))
-    def generaliza(self, hijo, padre, dy=0): self.rel.append(('gen', hijo, padre, (0, dy)))
+    def asocia(self, a, c): self.rel.append(('asoc', a, c, None, None))
+    def incluye(self, base, incl, off=(0, 0)): self.rel.append(('include', base, incl, off, None))
+    def extiende(self, ext, base, off=(0, 0), cond=None):
+        """La flecha va SIEMPRE del caso extensor al caso base; cond = condición de la extensión."""
+        self.rel.append(('extend', ext, base, off, cond))
+    def generaliza(self, hijo, padre, dy=0): self.rel.append(('gen', hijo, padre, (0, dy), None))
+
+    def igualar_columnas(self):
+        """Casos de uso de una misma columna (misma x) con el mismo ancho: así las líneas de los
+        actores, que llegan al borde lateral, nunca atraviesan otra elipse de la columna."""
+        por_x = {}
+        for k, (l, x, y, a, b) in self.cus.items():
+            por_x.setdefault(x, []).append(k)
+        for x, ks in por_x.items():
+            amax = max(self.cus[k][3] for k in ks)
+            for k in ks:
+                l, x_, y, a, b = self.cus[k]
+                self.cus[k] = (l, x_, y, amax, b)
+
+    def vertice_lateral(self, k, desde_x):
+        """Punto de la elipse que mira al actor (extremo izquierdo o derecho)."""
+        _, cx, cy, a, b = self.cus[k]
+        return (cx - a, cy) if desde_x < cx else (cx + a, cy)
 
     # ---- geometría
     def borde_cu(self, k, hacia):
@@ -74,9 +93,15 @@ class Diagrama:
         o.append(f'<rect x="{x0}" y="{y0}" width="{x1-x0}" height="{y1-y0}" fill="#fff" stroke="#111" stroke-width="1.8"/>')
         o.append(f'<text x="{(x0+x1)/2}" y="{y0+22}" text-anchor="middle" font-size="13.5" font-weight="bold">{html.escape(self.sistema)}</text>')
         # relaciones (debajo de las figuras)
-        for tipo, a, b, off in self.rel:
+        self.igualar_columnas()
+        for tipo, a, b, off, cond in self.rel:
             ca, cb = self.centro(a), self.centro(b)
-            p, q = self.extremo(a, cb), self.extremo(b, ca)
+            if tipo == 'asoc':
+                # la línea del actor llega al borde lateral de la elipse: no cruza otras elipses
+                q = self.vertice_lateral(b, ca[0])
+                p = self.punto_actor(a, q)
+            else:
+                p, q = self.extremo(a, cb), self.extremo(b, ca)
             if tipo == 'gen' and off:
                 q = (q[0] + 6, q[1] + off[1])
             if tipo == 'asoc':
@@ -90,6 +115,8 @@ class Diagrama:
                 mx, my = (p[0] + q[0]) / 2 + off[0], (p[1] + q[1]) / 2 + off[1]
                 etiqueta = '«include»' if tipo == 'include' else '«extend»'
                 o.append(f'<text x="{mx:.1f}" y="{my-7:.1f}" text-anchor="middle" font-size="12.5" paint-order="stroke" stroke="#fff" stroke-width="4">{etiqueta}</text>')
+                if cond:
+                    o.append(f'<text x="{mx:.1f}" y="{my+8:.1f}" text-anchor="middle" font-size="11.5" font-style="italic" fill="#333" paint-order="stroke" stroke="#fff" stroke-width="4">[{html.escape(cond)}]</text>')
         # casos de uso
         for k, (lineas, x, y, a, b) in self.cus.items():
             o.append(f'<ellipse cx="{x}" cy="{y}" rx="{a:.1f}" ry="{b:.1f}" fill="#fff" stroke="#111" stroke-width="1.8"/>')
@@ -144,19 +171,20 @@ for a, e in [('UA', 'E1'), ('UA', 'E5'), ('AD', 'E2'), ('AD', 'E5'), ('CO', 'E8'
 paginas.append(d)
 
 # ---------------------------------------------------------------- E1
-d = Diagrama('2. Detalle E1 - Gestionar acceso y cuenta', 'E1. Gestionar acceso y cuenta', 1200, 560, caja=(260, 50, 1150, 530))
-d.actor('UA', 'Usuario\nautenticado', 120, 300)
+d = Diagrama('2. Detalle E1 - Gestionar acceso y cuenta', 'E1. Gestionar acceso y cuenta', 1200, 580, caja=(260, 50, 1150, 550))
+d.actor('UA', 'Usuario\nautenticado', 120, 320)
 d.cu('ini', 'Iniciar sesión', 520, 130)
 d.cu('cer', 'Cerrar sesión', 520, 225)
 d.cu('cam', 'Cambiar contraseña', 520, 320)
-d.cu('per', 'Actualizar datos de perfil', 520, 410)
-d.cu('pre', 'Configurar preferencias\nde notificación', 520, 485)
+d.cu('per', 'Actualizar datos de perfil', 520, 415)
+d.cu('pre', 'Configurar preferencias\nde notificación', 520, 500)
 d.cu('val', 'Validar credenciales', 930, 225)
-d.cu('rec', 'Recuperar contraseña\npor código de correo', 930, 115)
-d.cu('blo', 'Bloquear cuenta por\nintentos fallidos', 930, 330)
+d.cu('rec', 'Recuperar contraseña\npor código de correo', 930, 110)
+d.cu('blo', 'Bloquear cuenta por\nintentos fallidos', 930, 360)
 for c in ('ini', 'cer', 'cam', 'per', 'pre'): d.asocia('UA', c)
 d.incluye('ini', 'val'); d.incluye('cam', 'val', (0, 18))
-d.extiende('rec', 'ini'); d.extiende('blo', 'val', (40, 10))
+d.extiende('rec', 'ini', (0, -4), 'olvidó su contraseña')
+d.extiende('blo', 'val', (78, 4), '3 intentos fallidos')
 paginas.append(d)
 
 # ---------------------------------------------------------------- E2
@@ -168,61 +196,60 @@ filas = [('usu', 'Gestionar usuarios'), ('rol', 'Gestionar roles y permisos'), (
 for i, (k, n) in enumerate(filas):
     d.cu(k, n, 500, 115 + i * 92)
     d.asocia('AD', k)
-d.cu('reg', 'Registrar cambio\nen el historial', 930, 310)
+d.cu('reg', 'Registrar cambio\nen el historial', 930, 330)
 d.cu('res', 'Restablecer contraseña\nde un usuario', 930, 110)
 for k in ('usu', 'rol', 'del', 'cat', 'ite'): d.incluye(k, 'reg')
-d.extiende('res', 'usu')
+d.extiende('res', 'usu', (0, -2), 'el usuario olvidó su clave')
 paginas.append(d)
 
 # ---------------------------------------------------------------- E3 Organizaciones
 d = Diagrama('4. Detalle E3 - Gestionar organizaciones comunitarias', 'E3. Gestionar organizaciones comunitarias', 1240, 620, caja=(260, 50, 1180, 590))
 d.actor('UA', 'Usuario\nautenticado', 120, 170)
-d.actor('AD', 'Administrador', 120, 380)
-d.actor('DE', 'Delegado /\nJefatura', 120, 540)
+d.actor('AD', 'Administrador', 120, 360)
+d.actor('DE', 'Delegado /\nJefatura', 120, 520)
 d.cu('con', 'Consultar organizaciones', 520, 130)
 d.cu('reg', 'Registrar organización', 520, 250)
 d.cu('act', 'Actualizar organización\ny su directiva', 520, 370)
-d.cu('ver', 'Marcar organización como\nverificada', 520, 490)
+d.cu('ver', 'Marcar organización\ncomo verificada', 520, 490)
 d.cu('dir', 'Validar directiva\n(nombre, RUT y teléfono)', 950, 310)
-d.cu('sub', 'Asignar subfamilia\nfuncional', 950, 160)
+d.cu('sub', 'Asignar subfamilia\nfuncional', 950, 150)
 d.asocia('UA', 'con')
 for a in ('AD', 'DE'):
     for c in ('reg', 'act', 'ver'): d.asocia(a, c)
 d.incluye('reg', 'dir'); d.incluye('act', 'dir', (0, 20))
-d.extiende('sub', 'reg')
+d.extiende('sub', 'reg', (0, -4), 'tipo = Funcional')
 paginas.append(d)
 
 # ---------------------------------------------------------------- E4 Consultar y reportar
-d = Diagrama('5. Detalle E4 - Consultar y reportar información', 'E4. Consultar y reportar información', 1240, 520, caja=(260, 50, 1180, 490))
+d = Diagrama('5. Detalle E4 - Consultar y reportar información', 'E4. Consultar y reportar información', 1240, 560, caja=(260, 50, 1180, 530))
 d.actor('UCo', 'Usuario de\nconsulta', 120, 150)
-d.actor('CO', 'Coordinador del\nsistema', 120, 300)
-d.actor('DE', 'Delegado /\nJefatura', 120, 440)
+d.actor('CO', 'Coordinador del\nsistema', 120, 320)
+d.actor('DE', 'Delegado /\nJefatura', 120, 480)
 d.cu('bus', 'Realizar búsqueda avanzada', 540, 140)
-d.cu('inf', 'Generar informe de gestión', 540, 400)
-d.cu('exp', 'Exportar resultados\n(Excel o PDF)', 560, 270)
-d.cu('fil', 'Filtrar información\n(delegación, período, ítem…)', 965, 270)
+d.cu('exc', 'Exportar resultados a Excel', 540, 290)
+d.cu('inf', 'Generar informe de gestión\n(PDF imprimible)', 540, 440)
+d.cu('alc', 'Aplicar alcance del rol\n(delegaciones permitidas)', 965, 290)
 for a in ('UCo', 'CO', 'DE'):
-    d.asocia(a, 'bus'); d.asocia(a, 'inf')
-d.incluye('bus', 'fil', (10, 0)); d.incluye('inf', 'fil', (10, 30))
-d.extiende('exp', 'bus', (34, 6)); d.extiende('exp', 'inf', (34, 14))
+    for c in ('bus', 'exc', 'inf'): d.asocia(a, c)
+d.incluye('bus', 'alc', (0, -2)); d.incluye('exc', 'alc'); d.incluye('inf', 'alc', (0, 26))
 paginas.append(d)
 
 # ---------------------------------------------------------------- E5 Matriz SGR
 d = Diagrama('6. Detalle E5 - Supervisar desempeño del equipo (Matriz SGR)', 'E5. Supervisar desempeño del equipo (Matriz SGR)', 1240, 700, caja=(260, 50, 1180, 670))
-d.actor('DE', 'Delegado /\nJefatura', 120, 360)
-d.actor('CO', 'Coordinador del\nsistema', 120, 140)
+d.actor('CO', 'Coordinador del\nsistema', 120, 150)
+d.actor('DE', 'Delegado /\nJefatura', 120, 440)
 d.cu('com', 'Comparar desempeño\nde delegaciones', 520, 120)
 d.cu('mat', 'Consultar matriz del\nequipo por trimestre', 520, 235)
 d.cu('aus', 'Registrar ausencia\n(vacaciones, licencias)', 520, 360)
 d.cu('fel', 'Registrar felicitación', 520, 475)
-d.cu('rcl', 'Registrar reclamo', 520, 590)
-d.cu('cum', 'Calcular cumplimiento\ntrimestral', 960, 175)
+d.cu('rcl', 'Registrar reclamo\n(descuenta puntos)', 520, 590)
+d.cu('cum', 'Calcular cumplimiento\ntrimestral (tope 120%)', 960, 175)
 d.cu('rez', 'Identificar funcionarios\nrezagados', 960, 330)
 d.cu('res', 'Validar respaldo formal', 960, 530)
 d.asocia('CO', 'com'); d.asocia('CO', 'mat')
 for c in ('mat', 'aus', 'fel', 'rcl'): d.asocia('DE', c)
 d.incluye('com', 'cum'); d.incluye('mat', 'cum', (0, 22))
-d.extiende('rez', 'mat', (0, 20))
+d.extiende('rez', 'mat', (0, 20), 'semáforo en rojo')
 d.incluye('fel', 'res'); d.incluye('rcl', 'res', (0, 22))
 paginas.append(d)
 
@@ -237,41 +264,114 @@ d.cu('evi', 'Revisar evidencia\ny respaldos', 930, 200)
 d.cu('cor', 'Solicitar corrección', 930, 380)
 d.asocia('VE', 'val'); d.asocia('VE', 'rec'); d.asocia('CO', 'obs')
 d.incluye('val', 'evi'); d.incluye('rec', 'evi', (0, 22))
-d.extiende('cor', 'rec')
+d.extiende('cor', 'rec', (0, 4), 'el error es corregible')
 paginas.append(d)
 
 # ---------------------------------------------------------------- E7 Tubo
-d = Diagrama('8. Detalle E7 - Gestionar el tubo de compromisos', 'E7. Gestionar el tubo de compromisos', 1240, 620, caja=(260, 50, 1180, 590))
+d = Diagrama('8. Detalle E7 - Gestionar el tubo de compromisos', 'E7. Gestionar el tubo de compromisos', 1240, 640, caja=(260, 50, 1180, 610))
 d.actor('FU', 'Funcionario', 120, 200)
 d.actor('DE', 'Delegado /\nJefatura', 120, 470)
 d.cu('con', 'Consultar el tubo\n(lista o tablero)', 520, 125)
-d.cu('ven', 'Revisar compromisos\nvencidos', 520, 240)
+d.cu('ven', 'Revisar compromisos\nvencidos', 520, 250)
 d.cu('mov', 'Mover compromiso\nde etapa', 520, 380)
-d.cu('rea', 'Reasignar compromiso', 520, 510)
-d.cu('fil', 'Filtrar compromisos\n(delegación, responsable, etapa)', 960, 180)
-d.cu('rlz', 'Marcar compromiso\ncomo realizado', 960, 380)
+d.cu('rea', 'Reasignar compromiso', 520, 530)
+d.cu('alc', 'Aplicar alcance del rol\n(compromisos visibles)', 960, 250)
+d.cu('rlz', 'Marcar compromiso\ncomo realizado', 960, 470)
 for c in ('con', 'mov'): d.asocia('FU', c)
-for c in ('con', 'mov', 'ven', 'rea'): d.asocia('DE', c)
-d.incluye('con', 'fil'); d.incluye('ven', 'fil', (0, 28))
-d.extiende('rlz', 'mov')
+for c in ('con', 'ven', 'mov', 'rea'): d.asocia('DE', c)
+d.incluye('con', 'alc', (0, -2)); d.incluye('ven', 'alc'); d.incluye('mov', 'alc', (0, 26))
+d.extiende('rlz', 'mov', (30, 30), 'etapa destino = Realizado')
 paginas.append(d)
 
 # ---------------------------------------------------------------- E8 Actividades
-d = Diagrama('9. Detalle E8 - Gestionar actividades territoriales', 'E8. Gestionar actividades territoriales', 1240, 640, caja=(260, 50, 1180, 610))
-d.actor('FU', 'Funcionario', 120, 330)
+d = Diagrama('9. Detalle E8 - Gestionar actividades territoriales', 'E8. Gestionar actividades territoriales', 1240, 660, caja=(260, 50, 1180, 630))
+d.actor('FU', 'Funcionario', 120, 340)
 d.cu('reg', 'Registrar atención\no actividad', 480, 150)
-d.cu('evi', 'Adjuntar evidencia', 480, 290)
-d.cu('eje', 'Marcar actividad\ncomo ejecutada', 480, 430)
-d.cu('ava', 'Consultar mi avance', 480, 545)
-d.cu('reglas', 'Validar reglas de ingreso\n(plazo semanal, máx. 7 diarias)', 790, 290)
-d.cu('pun', 'Calcular puntaje\n(tope 120%)', 1065, 290, 190)
-d.cu('org', 'Asociar a organización\npor RUT del dirigente', 820, 130)
-d.cu('otra', 'Clasificar como\notra gestión', 1080, 190, 170)
+d.cu('eje', 'Marcar actividad\ncomo ejecutada', 480, 320)
+d.cu('evi', 'Adjuntar evidencia', 480, 450)
+d.cu('ava', 'Consultar mi avance', 480, 570)
+d.cu('reglas', 'Validar reglas de ingreso\n(plazo semanal, máx. 7 diarias)', 880, 285)
+d.cu('pun', 'Calcular puntaje\n(tope 120% por ítem)', 880, 495)
+d.cu('org', 'Asociar a organización\npor RUT del dirigente', 850, 120)
+d.cu('otra', 'Clasificar como\notra gestión', 1080, 195, 170)
 for c in ('reg', 'eje', 'evi', 'ava'): d.asocia('FU', c)
-d.incluye('reg', 'reglas', (-30, 6)); d.incluye('eje', 'reglas', (-30, 24))
-d.incluye('reg', 'pun', (40, -6)); d.incluye('eje', 'pun', (40, 26))
-d.extiende('org', 'reg', (0, 2)); d.extiende('otra', 'reg', (120, 30))
+d.incluye('reg', 'reglas', (0, -4)); d.incluye('eje', 'reglas', (10, 24))
+d.incluye('eje', 'pun', (0, -6)); d.incluye('ava', 'pun', (0, 24))
+d.extiende('eje', 'reg', (70, 6), 'estado = Ejecutada')
+d.extiende('org', 'reg', (0, -2), 'RUT de un dirigente')
+d.extiende('otra', 'reg', (40, 32), 'solicitante = Delegado')
 paginas.append(d)
+
+
+# ---------------------------------------------------------------- Anexo: trazabilidad
+class Anexo:
+    """Tabla actores × épicas y lista de «include» con sus casos de uso de origen."""
+    titulo = 'Anexo. Trazabilidad entre el diagrama general y los de detalle'
+    w, h = 1240, 940
+    caja = (0, 0, 0, 0)
+    ACTORES = ['Usuario autenticado', 'Administrador', 'Coordinador del sistema', 'Delegado / Jefatura',
+               'Funcionario', 'Verificador', 'Usuario de consulta']
+    EPICAS = [('E1', 'Gestionar acceso y cuenta', 'uc 2', {0}),
+              ('E2', 'Administrar el sistema', 'uc 3', {1}),
+              ('E3', 'Gestionar organizaciones comunitarias', 'uc 4', {0, 1, 3}),
+              ('E4', 'Consultar y reportar información', 'uc 5', {2, 3, 6}),
+              ('E5', 'Supervisar desempeño del equipo', 'uc 6', {2, 3}),
+              ('E6', 'Verificar registros', 'uc 7', {2, 5}),
+              ('E7', 'Gestionar el tubo de compromisos', 'uc 8', {3, 4}),
+              ('E8', 'Gestionar actividades territoriales', 'uc 9', {4})]
+    INCLUDES = [('uc 2', 'Validar credenciales', 'Iniciar sesión · Cambiar contraseña'),
+                ('uc 3', 'Registrar cambio en el historial', 'Gestionar usuarios · roles · delegaciones · catálogos · ítems y metas'),
+                ('uc 4', 'Validar directiva', 'Registrar organización · Actualizar organización'),
+                ('uc 5', 'Aplicar alcance del rol', 'Búsqueda avanzada · Exportar a Excel · Informe de gestión'),
+                ('uc 6', 'Calcular cumplimiento trimestral', 'Consultar matriz · Comparar delegaciones'),
+                ('uc 6', 'Validar respaldo formal', 'Registrar felicitación · Registrar reclamo'),
+                ('uc 7', 'Revisar evidencia y respaldos', 'Validar registro · Rechazar registro'),
+                ('uc 8', 'Aplicar alcance del rol', 'Consultar el tubo · Revisar vencidos · Mover de etapa'),
+                ('uc 9', 'Validar reglas de ingreso', 'Registrar atención · Marcar como ejecutada'),
+                ('uc 9', 'Calcular puntaje (tope 120%)', 'Marcar como ejecutada · Consultar mi avance')]
+
+    def svg(self):
+        e = html.escape
+        o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.w} {self.h}" width="{self.w}" height="{self.h}" font-family="{FONT}">',
+             f'<rect x="0.5" y="0.5" width="{self.w-1}" height="{self.h-1}" fill="#fff" stroke="#111"/>',
+             f'<text x="40" y="50" font-size="19" font-weight="bold">{e(self.titulo)}</text>',
+             '<text x="40" y="76" font-size="13" fill="#333">Cada actor asociado a una épica en «uc 1» aparece en su diagrama de detalle, y solo en ese.</text>']
+        x0, y0, col0, colw, filah = 40, 100, 360, 112, 46
+        o.append(f'<rect x="{x0}" y="{y0}" width="{col0 + colw*len(self.ACTORES)}" height="{filah*(len(self.EPICAS)+1)+14}" fill="none" stroke="#111"/>')
+        for j, a in enumerate(self.ACTORES):
+            cx = x0 + col0 + colw * j + colw / 2
+            for i, linea in enumerate(self._partir(a)):
+                o.append(f'<text x="{cx}" y="{y0 + 22 + i*15}" text-anchor="middle" font-size="12.5" font-weight="bold">{e(linea)}</text>')
+            o.append(f'<line x1="{x0+col0+colw*j}" y1="{y0}" x2="{x0+col0+colw*j}" y2="{y0+filah*(len(self.EPICAS)+1)+14}" stroke="#bbb"/>')
+        o.append(f'<text x="{x0+14}" y="{y0+30}" font-size="12.5" font-weight="bold">Épica (diagrama de detalle)</text>')
+        for i, (cod, nom, uc, actores) in enumerate(self.EPICAS):
+            y = y0 + filah * (i + 1) + 14
+            o.append(f'<line x1="{x0}" y1="{y}" x2="{x0+col0+colw*len(self.ACTORES)}" y2="{y}" stroke="#bbb"/>')
+            o.append(f'<text x="{x0+14}" y="{y+20}" font-size="13" font-weight="bold">{cod}. {e(nom)}</text>')
+            o.append(f'<text x="{x0+14}" y="{y+37}" font-size="11.5" fill="#444">detalle en {uc}</text>')
+            for j in range(len(self.ACTORES)):
+                if j in actores:
+                    cx = x0 + col0 + colw * j + colw / 2
+                    o.append(f'<circle cx="{cx}" cy="{y+23}" r="9" fill="#111"/>')
+        yi = y0 + filah * (len(self.EPICAS) + 1) + 70
+        o.append(f'<text x="40" y="{yi}" font-size="16" font-weight="bold">«include»: cada uno es usado por al menos 2 casos de uso del mismo diagrama</text>')
+        for i, (uc, inc, origen) in enumerate(self.INCLUDES):
+            y = yi + 30 + i * 25
+            o.append(f'<text x="40" y="{y}" font-size="13" font-weight="bold">{e(uc)}</text>')
+            o.append(f'<text x="100" y="{y}" font-size="13" font-weight="bold">{e(inc)}</text>')
+            o.append(f'<text x="390" y="{y}" font-size="13">← {e(origen)}</text>')
+        y = yi + 30 + len(self.INCLUDES) * 25 + 14
+        o.append(f'<text x="40" y="{y}" font-size="12.5" fill="#333">«extend»: la flecha va siempre del caso extensor al caso base, con su condición entre corchetes.</text>')
+        o.append('</svg>')
+        return '\n'.join(o)
+
+    @staticmethod
+    def _partir(t):
+        if len(t) <= 14: return [t]
+        corte = t.rfind(' ', 0, 15)
+        return [t[:corte], t[corte+1:]]
+
+paginas.append(Anexo())
 
 # ---------------------------------------------------------------- salida
 def svg_actores(d):
