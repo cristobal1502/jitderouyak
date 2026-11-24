@@ -114,9 +114,14 @@ class Diagrama:
                 o.append(self.flecha_abierta(p, q))
                 mx, my = (p[0] + q[0]) / 2 + off[0], (p[1] + q[1]) / 2 + off[1]
                 etiqueta = '«include»' if tipo == 'include' else '«extend»'
-                o.append(f'<text x="{mx:.1f}" y="{my-7:.1f}" text-anchor="middle" font-size="12.5" paint-order="stroke" stroke="#fff" stroke-width="4">{etiqueta}</text>')
+                textos = [(etiqueta, 12.5, '')]
                 if cond:
-                    o.append(f'<text x="{mx:.1f}" y="{my+8:.1f}" text-anchor="middle" font-size="11.5" font-style="italic" fill="#333" paint-order="stroke" stroke="#fff" stroke-width="4">[{html.escape(cond)}]</text>')
+                    textos.append((f'[{cond}]', 11.5, ' font-style="italic" fill="#333"'))
+                ancho = max(ancho_texto(t, tam, False) for t, tam, _ in textos) + 10
+                alto = 17 * len(textos) + 2
+                o.append(f'<rect x="{mx-ancho/2:.1f}" y="{my-20:.1f}" width="{ancho:.1f}" height="{alto}" fill="#fff"/>')
+                for i, (t, tam, extra) in enumerate(textos):
+                    o.append(f'<text x="{mx:.1f}" y="{my-7+i*15:.1f}" text-anchor="middle" font-size="{tam}"{extra}>{html.escape(t)}</text>')
         # casos de uso
         for k, (lineas, x, y, a, b) in self.cus.items():
             o.append(f'<ellipse cx="{x}" cy="{y}" rx="{a:.1f}" ry="{b:.1f}" fill="#fff" stroke="#111" stroke-width="1.8"/>')
@@ -147,26 +152,29 @@ for i, (k, n) in enumerate([('AD', 'Administrador'), ('CO', 'Coordinador del\nsi
 paginas.append(d)
 
 # ---------------------------------------------------------------- 1. General (épicas)
+# Orden pensado para que cada actor quede a la altura de sus épicas: las cuatro del Delegado
+# (E3 a E6) van seguidas y «Verificar registros» queda al final, junto a Verificador y Coordinador.
 d = Diagrama('1. General (épicas)', SIS, 1240, 940, caja=(250, 60, 990, 910))
 d.actor('UA', 'Usuario\nautenticado', 120, 160)
-d.actor('AD', 'Administrador', 120, 360)
-d.actor('CO', 'Coordinador del\nsistema', 120, 640)
-d.actor('DE', 'Delegado /\nJefatura', 1120, 420)
-d.actor('FU', 'Funcionario', 1120, 800)
-d.actor('VE', 'Verificador', 1120, 610)
-d.actor('UCo', 'Usuario de\nconsulta', 1120, 210)
+d.actor('AD', 'Administrador', 120, 330)
+d.actor('CO', 'Coordinador del\nsistema', 120, 860)
+d.actor('UCo', 'Usuario de\nconsulta', 1120, 200)
+d.actor('DE', 'Delegado /\nJefatura', 1120, 500)
+d.actor('FU', 'Funcionario', 1120, 715)
+d.actor('VE', 'Verificador', 1120, 870)
 cx = 620
 d.cu('E1', 'E1. Gestionar acceso y cuenta', cx, 130, 330)
 d.cu('E2', 'E2. Administrar el sistema', cx, 225, 330)
-d.cu('E5', 'E3. Gestionar organizaciones\ncomunitarias', cx, 325, 330)
-d.cu('E8', 'E4. Consultar y reportar\ninformación', cx, 430, 330)
-d.cu('E6', 'E5. Supervisar desempeño\ndel equipo (Matriz SGR)', cx, 540, 330)
-d.cu('E7', 'E6. Verificar registros', cx, 640, 330)
-d.cu('E4', 'E7. Gestionar el tubo de\ncompromisos', cx, 740, 330)
-d.cu('E3', 'E8. Gestionar actividades\nterritoriales', cx, 845, 330)
-for a, e in [('UA', 'E1'), ('UA', 'E5'), ('AD', 'E2'), ('AD', 'E5'), ('CO', 'E8'), ('CO', 'E6'), ('CO', 'E7'),
-             ('DE', 'E5'), ('DE', 'E8'), ('DE', 'E6'), ('DE', 'E4'), ('UCo', 'E8'), ('VE', 'E7'),
-             ('FU', 'E4'), ('FU', 'E3')]:
+d.cu('E3', 'E3. Gestionar organizaciones\ncomunitarias', cx, 325, 330)
+d.cu('E4', 'E4. Consultar y reportar\ninformación', cx, 430, 330)
+d.cu('E5', 'E5. Supervisar desempeño\ndel equipo (Matriz SGR)', cx, 540, 330)
+d.cu('E6', 'E6. Gestionar el tubo de\ncompromisos', cx, 645, 330)
+d.cu('E7', 'E7. Gestionar actividades\nterritoriales', cx, 750, 330)
+d.cu('E8', 'E8. Verificar registros', cx, 850, 330)
+for a, e in [('UA', 'E1'), ('UA', 'E3'), ('AD', 'E2'), ('AD', 'E3'),
+             ('CO', 'E4'), ('CO', 'E5'), ('CO', 'E8'),
+             ('UCo', 'E4'), ('DE', 'E3'), ('DE', 'E4'), ('DE', 'E5'), ('DE', 'E6'),
+             ('FU', 'E6'), ('FU', 'E7'), ('VE', 'E8')]:
     d.asocia(a, e)
 paginas.append(d)
 
@@ -183,7 +191,7 @@ d.cu('rec', 'Recuperar contraseña\npor código de correo', 930, 110)
 d.cu('blo', 'Bloquear cuenta por\nintentos fallidos', 930, 360)
 for c in ('ini', 'cer', 'cam', 'per', 'pre'): d.asocia('UA', c)
 d.incluye('ini', 'val'); d.incluye('cam', 'val', (0, 18))
-d.extiende('rec', 'ini', (0, -4), 'olvidó su contraseña')
+d.extiende('rec', 'ini', (0, -24), 'olvidó su contraseña')
 d.extiende('blo', 'val', (78, 4), '3 intentos fallidos')
 paginas.append(d)
 
@@ -199,7 +207,7 @@ for i, (k, n) in enumerate(filas):
 d.cu('reg', 'Registrar cambio\nen el historial', 930, 330)
 d.cu('res', 'Restablecer contraseña\nde un usuario', 930, 110)
 for k in ('usu', 'rol', 'del', 'cat', 'ite'): d.incluye(k, 'reg')
-d.extiende('res', 'usu', (0, -2), 'el usuario olvidó su clave')
+d.extiende('res', 'usu', (0, 28), 'el usuario olvidó su clave')
 paginas.append(d)
 
 # ---------------------------------------------------------------- E3 Organizaciones
@@ -253,38 +261,25 @@ d.extiende('rez', 'mat', (0, 20), 'semáforo en rojo')
 d.incluye('fel', 'res'); d.incluye('rcl', 'res', (0, 22))
 paginas.append(d)
 
-# ---------------------------------------------------------------- E6 Verificar
-d = Diagrama('7. Detalle E6 - Verificar registros', 'E6. Verificar registros', 1200, 520, caja=(260, 50, 1150, 490))
-d.actor('VE', 'Verificador', 120, 200)
-d.actor('CO', 'Coordinador del\nsistema', 120, 430)
-d.cu('val', 'Validar registro', 520, 130)
-d.cu('rec', 'Rechazar registro', 520, 270)
-d.cu('obs', 'Responder observaciones\nde registros', 520, 420)
-d.cu('evi', 'Revisar evidencia\ny respaldos', 930, 200)
-d.cu('cor', 'Solicitar corrección', 930, 380)
-d.asocia('VE', 'val'); d.asocia('VE', 'rec'); d.asocia('CO', 'obs')
-d.incluye('val', 'evi'); d.incluye('rec', 'evi', (0, 22))
-d.extiende('cor', 'rec', (0, 4), 'el error es corregible')
-paginas.append(d)
-
-# ---------------------------------------------------------------- E7 Tubo
-d = Diagrama('8. Detalle E7 - Gestionar el tubo de compromisos', 'E7. Gestionar el tubo de compromisos', 1240, 640, caja=(260, 50, 1180, 610))
+# ---------------------------------------------------------------- E6 Tubo
+d = Diagrama('7. Detalle E6 - Gestionar el tubo de compromisos', 'E6. Gestionar el tubo de compromisos', 1240, 640, caja=(260, 50, 1180, 610))
 d.actor('FU', 'Funcionario', 120, 200)
 d.actor('DE', 'Delegado /\nJefatura', 120, 470)
 d.cu('con', 'Consultar el tubo\n(lista o tablero)', 520, 125)
-d.cu('ven', 'Revisar compromisos\nvencidos', 520, 250)
-d.cu('mov', 'Mover compromiso\nde etapa', 520, 380)
-d.cu('rea', 'Reasignar compromiso', 520, 530)
-d.cu('alc', 'Aplicar alcance del rol\n(compromisos visibles)', 960, 250)
-d.cu('rlz', 'Marcar compromiso\ncomo realizado', 960, 470)
+d.cu('ven', 'Revisar compromisos\nvencidos', 520, 245)
+d.cu('rea', 'Reasignar compromiso', 520, 365)
+d.cu('mov', 'Mover compromiso\nde etapa', 520, 490)
+d.cu('alc', 'Aplicar alcance del rol\n(compromisos visibles)', 960, 290)
+d.cu('rlz', 'Marcar compromiso\ncomo realizado', 960, 520)
 for c in ('con', 'mov'): d.asocia('FU', c)
-for c in ('con', 'ven', 'mov', 'rea'): d.asocia('DE', c)
-d.incluye('con', 'alc', (0, -2)); d.incluye('ven', 'alc'); d.incluye('mov', 'alc', (0, 26))
-d.extiende('rlz', 'mov', (30, 30), 'etapa destino = Realizado')
+for c in ('con', 'ven', 'rea', 'mov'): d.asocia('DE', c)
+d.incluye('con', 'alc', (0, -4)); d.incluye('ven', 'alc', (0, -2))
+d.incluye('rea', 'alc', (0, 2)); d.incluye('mov', 'alc', (10, 6))
+d.extiende('rlz', 'mov', (0, 30), 'etapa destino = Realizado')
 paginas.append(d)
 
-# ---------------------------------------------------------------- E8 Actividades
-d = Diagrama('9. Detalle E8 - Gestionar actividades territoriales', 'E8. Gestionar actividades territoriales', 1240, 660, caja=(260, 50, 1180, 630))
+# ---------------------------------------------------------------- E7 Actividades
+d = Diagrama('8. Detalle E7 - Gestionar actividades territoriales', 'E7. Gestionar actividades territoriales', 1240, 660, caja=(260, 50, 1180, 630))
 d.actor('FU', 'Funcionario', 120, 340)
 d.cu('reg', 'Registrar atención\no actividad', 480, 150)
 d.cu('eje', 'Marcar actividad\ncomo ejecutada', 480, 320)
@@ -298,10 +293,24 @@ for c in ('reg', 'eje', 'evi', 'ava'): d.asocia('FU', c)
 d.incluye('reg', 'reglas', (0, -4)); d.incluye('eje', 'reglas', (10, 24))
 d.incluye('eje', 'pun', (0, -6)); d.incluye('ava', 'pun', (0, 24))
 d.extiende('eje', 'reg', (70, 6), 'estado = Ejecutada')
-d.extiende('org', 'reg', (0, -2), 'RUT de un dirigente')
+d.extiende('org', 'reg', (0, -26), 'RUT de un dirigente')
 d.extiende('otra', 'reg', (40, 32), 'solicitante = Delegado')
 paginas.append(d)
 
+
+# ---------------------------------------------------------------- E8 Verificar
+d = Diagrama('9. Detalle E8 - Verificar registros', 'E8. Verificar registros', 1200, 520, caja=(260, 50, 1150, 490))
+d.actor('VE', 'Verificador', 120, 200)
+d.actor('CO', 'Coordinador del\nsistema', 120, 430)
+d.cu('val', 'Validar registro', 520, 130)
+d.cu('rec', 'Rechazar registro', 520, 270)
+d.cu('obs', 'Responder observaciones\nde registros', 520, 420)
+d.cu('evi', 'Revisar evidencia\ny respaldos', 930, 200)
+d.cu('cor', 'Solicitar corrección', 930, 380)
+d.asocia('VE', 'val'); d.asocia('VE', 'rec'); d.asocia('CO', 'obs')
+d.incluye('val', 'evi'); d.incluye('rec', 'evi', (0, 22))
+d.extiende('cor', 'rec', (0, 4), 'el error es corregible')
+paginas.append(d)
 
 # ---------------------------------------------------------------- Anexo: trazabilidad
 class Anexo:
@@ -316,19 +325,19 @@ class Anexo:
               ('E3', 'Gestionar organizaciones comunitarias', 'uc 4', {0, 1, 3}),
               ('E4', 'Consultar y reportar información', 'uc 5', {2, 3, 6}),
               ('E5', 'Supervisar desempeño del equipo', 'uc 6', {2, 3}),
-              ('E6', 'Verificar registros', 'uc 7', {2, 5}),
-              ('E7', 'Gestionar el tubo de compromisos', 'uc 8', {3, 4}),
-              ('E8', 'Gestionar actividades territoriales', 'uc 9', {4})]
+              ('E6', 'Gestionar el tubo de compromisos', 'uc 7', {3, 4}),
+              ('E7', 'Gestionar actividades territoriales', 'uc 8', {4}),
+              ('E8', 'Verificar registros', 'uc 9', {2, 5})]
     INCLUDES = [('uc 2', 'Validar credenciales', 'Iniciar sesión · Cambiar contraseña'),
                 ('uc 3', 'Registrar cambio en el historial', 'Gestionar usuarios · roles · delegaciones · catálogos · ítems y metas'),
                 ('uc 4', 'Validar directiva', 'Registrar organización · Actualizar organización'),
                 ('uc 5', 'Aplicar alcance del rol', 'Búsqueda avanzada · Exportar a Excel · Informe de gestión'),
                 ('uc 6', 'Calcular cumplimiento trimestral', 'Consultar matriz · Comparar delegaciones'),
                 ('uc 6', 'Validar respaldo formal', 'Registrar felicitación · Registrar reclamo'),
-                ('uc 7', 'Revisar evidencia y respaldos', 'Validar registro · Rechazar registro'),
-                ('uc 8', 'Aplicar alcance del rol', 'Consultar el tubo · Revisar vencidos · Mover de etapa'),
-                ('uc 9', 'Validar reglas de ingreso', 'Registrar atención · Marcar como ejecutada'),
-                ('uc 9', 'Calcular puntaje (tope 120%)', 'Marcar como ejecutada · Consultar mi avance')]
+                ('uc 7', 'Aplicar alcance del rol', 'Consultar el tubo · Revisar vencidos · Reasignar · Mover de etapa'),
+                ('uc 8', 'Validar reglas de ingreso', 'Registrar atención · Marcar como ejecutada'),
+                ('uc 8', 'Calcular puntaje (tope 120%)', 'Marcar como ejecutada · Consultar mi avance'),
+                ('uc 9', 'Revisar evidencia y respaldos', 'Validar registro · Rechazar registro')]
 
     def svg(self):
         e = html.escape
