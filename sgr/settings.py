@@ -38,8 +38,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',  # lista negra de refresh (rotación y logout)
+    'drf_spectacular',
     'dashboard',
     'login',
+    'sgrApi',
 ]
 
 MIDDLEWARE = [
@@ -120,6 +124,75 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'  # destino de: python manage.py collectst
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_URL = 'login'
+
+# ---------------------------------------------------------------- API REST (/api/v1/)
+from datetime import timedelta  # noqa: E402
+
+REST_FRAMEWORK = {
+    # Solo JWT: el front web sigue usando su propia API con sesión en /dashboard/api/.
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
+    # Cerrado por defecto: toda vista exige token salvo que diga lo contrario (token/, docs/).
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    # Siempre JSON (sin la interfaz navegable de DRF).
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser'],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    # Límite de solicitudes por minuto (429 al superarlo). "token" protege el login contra fuerza bruta.
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': os.environ.get('API_THROTTLE_ANON', '30/min'),
+        'user': os.environ.get('API_THROTTLE_USER', '300/min'),
+        'token': os.environ.get('API_THROTTLE_TOKEN', '10/min'),
+    },
+    'EXCEPTION_HANDLER': 'sgrApi.excepciones.manejador_excepciones',
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),  # vida corta: si se filtra, sirve poco tiempo
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,        # cada refresh entrega un refresh nuevo...
+    'BLACKLIST_AFTER_ROTATION': True,     # ...y el anterior queda inutilizable
+    'UPDATE_LAST_LOGIN': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    # Firma con SECRET_KEY (viene del .env, nunca del código en producción).
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'SGR Municipal — API REST',
+    'DESCRIPTION': (
+        'API RESTful del Sistema de Gestión Territorial Municipal.\n\n'
+        '**Cómo probarla:** 1) `POST /api/v1/token/` con usuario y contraseña; '
+        '2) copia el valor de `access`; 3) botón **Authorize** y pégalo. El token dura 15 minutos '
+        '(renuévalo con `/api/v1/token/refresh/`).\n\n'
+        '**Errores:** siempre `{"error": ..., "campo": ..., "detalle": ...}` con 400, 401, 403, 404, 409 o 429.\n\n'
+        '**Datos sensibles:** solo el administrador ve RUT y teléfonos de vecinos y de la directiva de '
+        'organizaciones; el resto de los roles recibe la vista básica.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,      # esquemas separados para lo que se envía y lo que se recibe
+    'SCHEMA_PATH_PREFIX': r'/api/v1',
+    'ENUM_NAME_OVERRIDES': {
+        'EstadoRegistroEnum': ['Activo', 'Inactivo'],
+        'EstadoAtencionEnum': 'dashboard.models.Atencion.ESTADOS',
+    },
+    'SWAGGER_UI_SETTINGS': {'persistAuthorization': True, 'displayRequestDuration': True},
+    'TAGS': [
+        {'name': 'Autenticación', 'description': 'Tokens JWT: login, renovación y logout.'},
+        {'name': 'Sesión', 'description': 'Datos del usuario del token.'},
+        {'name': 'Delegaciones', 'description': 'Persona 1 · mantenedor.'},
+        {'name': 'Tipos de atención', 'description': 'Persona 1 · mantenedor.'},
+        {'name': 'Atenciones', 'description': 'Persona 1 · transacción.'},
+        {'name': 'Ítems y metas', 'description': 'Persona 2 · mantenedor.'},
+        {'name': 'Organizaciones comunitarias', 'description': 'Persona 2 · mantenedor.'},
+        {'name': 'Reclamos', 'description': 'Persona 2 · transacción.'},
+    ],
+}
 
 # Correo (código de recuperación y contraseñas temporales).
 # Con EMAIL_HOST_PASSWORD definido en .env se envía por SMTP; si no, se imprime en la terminal.

@@ -827,7 +827,9 @@ def solicitante_es_delegado(solicitante, delegacion):
     return False
 
 
-def _validar_atencion(datos, user):
+def _validar_atencion(datos, user, excluir=None):
+    """Valida los datos de una actividad. 'excluir' es la propia atención cuando se edita
+    (para que no se cuente a sí misma en el límite diario)."""
     solicitante = leer_texto(datos, 'solicitante', 150)
     if not re.search(r'[^\W\d_]', solicitante):  # al menos una letra: no vale un número o símbolo suelto
         raise ErrorApi('nombre_invalido', 'solicitante')
@@ -881,7 +883,10 @@ def _validar_atencion(datos, user):
     if hoy > limite_ingreso(fecha):
         raise ErrorApi('semana_cerrada', 'fecha', limite_ingreso(fecha).isoformat())
 
-    if Atencion.objects.filter(responsable=responsable, fecha=fecha).count() >= Atencion.MAX_POR_DIA:
+    del_dia = Atencion.objects.filter(responsable=responsable, fecha=fecha)
+    if excluir is not None:
+        del_dia = del_dia.exclude(pk=excluir.pk)
+    if del_dia.count() >= Atencion.MAX_POR_DIA:
         raise ErrorApi('limite_diario', 'fecha', str(Atencion.MAX_POR_DIA))
 
     es_delegado = datos.get('solicitanteEsDelegado') is True or solicitante_es_delegado(solicitante, delegacion)
@@ -924,20 +929,23 @@ def atenciones(request):
 
     exigir(request, P.PERM_REGISTRAR)
     valores = _validar_atencion(leer_json(request), request.user)
-    atencion = alerta = None
+    atencion, alerta = crear_atencion(valores, request.user)
+    return JsonResponse({**serializar_atencion(atencion), 'alerta': alerta}, status=201)
+
+
+def crear_atencion(valores, user):
+    """Guarda una actividad ya validada con su código correlativo y su puntaje.
+    Devuelve (atencion, alerta). La usan la API web y la API REST (sgrApi)."""
     for _ in range(3):  # reintento por si dos personas toman el mismo correlativo a la vez
         try:
             with transaction.atomic():
-                atencion = Atencion(codigo=siguiente_codigo(Atencion, 'AT'), creado_por=request.user, **valores)
+                atencion = Atencion(codigo=siguiente_codigo(Atencion, 'AT'), creado_por=user, **valores)
                 alerta = M.asignar_puntaje(atencion)
                 atencion.save()
-            break
+            return atencion, alerta
         except IntegrityError:
-            atencion = None
             continue
-    if atencion is None:
-        raise ErrorApi('duplicado', 'codigo')
-    return JsonResponse({**serializar_atencion(atencion), 'alerta': alerta}, status=201)
+    raise ErrorApi('duplicado', 'codigo')
 
 
 def _fecha_ejecucion(texto, atencion):
@@ -1617,8 +1625,16 @@ def felicitaciones(request):
 def reclamos(request):
     """Registra un reclamo contra un funcionario del equipo. Solo el Delegado, con respaldo formal.
     Descuenta 'puntos' (1 a 5) del ítem indicado en el trimestre de la fecha del reclamo."""
-    datos = leer_json(request)
-    delegacion = _delegacion_de_equipo(request.user, leer_id(datos, 'delegacionId', Delegacion).pk,
+    valores = validar_reclamo(leer_json(request), request.user)
+    r = Reclamo.objects.create(**valores, registrado_por=request.user)
+    return JsonResponse(serializar_reclamo(Reclamo.objects.select_related('funcionario', 'item', 'registrado_por')
+                                           .get(pk=r.pk)), status=201)
+
+
+def validar_reclamo(datos, user):
+    """Valida un reclamo y devuelve los valores para el modelo. Solo el Delegado de esa delegación.
+    La usan la API web y la API REST (sgrApi)."""
+    delegacion = _delegacion_de_equipo(user, leer_id(datos, 'delegacionId', Delegacion).pk,
                                        exigir_delegado=True)
     funcionario = _miembro(datos, delegacion)
     item = leer_id(datos, 'itemId', ItemMeta)
@@ -1639,11 +1655,9 @@ def reclamos(request):
     if not 1 <= puntos <= Reclamo.MAX_DESCUENTO:
         raise ErrorApi('numero_invalido', 'puntos')
     respaldo_tipo, referencia = leer_respaldo(datos)
-    r = Reclamo.objects.create(funcionario=funcionario, delegacion=delegacion, item=item, fecha=fecha,
-                               reclamante=reclamante, motivo=motivo, respaldo_tipo=respaldo_tipo,
-                               respaldo_referencia=referencia, puntos=puntos, registrado_por=request.user)
-    return JsonResponse(serializar_reclamo(Reclamo.objects.select_related('funcionario', 'item', 'registrado_por')
-                                           .get(pk=r.pk)), status=201)
+    return {'funcionario': funcionario, 'delegacion': delegacion, 'item': item, 'fecha': fecha,
+            'reclamante': reclamante, 'motivo': motivo, 'respaldo_tipo': respaldo_tipo,
+            'respaldo_referencia': referencia, 'puntos': puntos}
 
 
 @api_login_requerido
